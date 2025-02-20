@@ -11,11 +11,21 @@ class StorytelProvider {
         this.baseBookUrl = 'https://www.storytel.com/api/getBookInfoForContent.action';
     }
 
+    /**
+     * Ensures a value is a string and trims it. Used for cleaning up data and returns
+     * @param value
+     * @returns {string}
+     */
     ensureString(value) {
         if (value === null || value === undefined) return '';
         return String(value).trim();
     }
 
+    /**
+     * Upgrades the cover URL to a higher resolution
+     * @param url
+     * @returns {undefined|string}
+     */
     upgradeCoverUrl(url) {
         if (!url) return undefined;
         return `https://storytel.com${url.replace('320x320', '640x640')}`;
@@ -31,6 +41,15 @@ class StorytelProvider {
         return genre.split(/[\/,]/).map(g => g.trim());
     }
 
+    escapeRegex(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /**
+     * Formats the book metadata to the ABS format
+     * @param bookData
+     * @returns {{title: (string|string), subtitle: *, author: (string|string), language: (string|string), genres: (*[]|undefined), tags: undefined, series: null, cover: string, duration: (number|undefined), narrator: (*|undefined), description: (string|string), publisher: (string|string), publishedYear: string | undefined, isbn: (string|string)}|null}
+     */
     formatBookMetadata(bookData) {
         const slb = bookData.slb;
         if (!slb || !slb.book) return null;
@@ -134,7 +153,6 @@ class StorytelProvider {
             /^.*?,\s*Avsnitt\s*\d+:\s*/i,
         ];
 
-
         patterns.forEach(pattern => {
             title = title.replace(pattern, '');
         });
@@ -144,10 +162,15 @@ class StorytelProvider {
 
             // Removes series from title name
             if (title.includes(seriesName)) {
-                const beforeSeriesMatch = title.match(new RegExp(`^(.+?)[-,]\\s*${seriesName}`));
+                const safeSeriesName = this.escapeRegex(seriesName);
+                const regex = new RegExp(`^(.+?)[-,]\\s*${safeSeriesName}`, 'i');
+
+                const beforeSeriesMatch = title.match(regex);
                 if (beforeSeriesMatch) {
                     title = beforeSeriesMatch[1].trim();
                 }
+
+                title = title.replace(seriesName, '');
             }
         }
 
