@@ -20,8 +20,14 @@ A metadata provider that fetches book information from Storytel's API.
         image: ghcr.io/vito0912/storytel-provider:latest
         container_name: storytel-provider
         restart: unless-stopped
+        networks:
+          - abs_network
         security_opt:
           - no-new-privileges:true
+
+    networks:
+      abs_network:
+        external: true
     ```
 
 2. **Run Docker Compose:**
