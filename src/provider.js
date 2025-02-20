@@ -43,7 +43,10 @@ class StorytelProvider {
      */
     splitGenre(genre) {
         if (!genre) return [];
-        return genre.split(/[\/,]/).map(g => g.trim());
+        return genre.split(/[\/,]/).map(g => {
+            const trimmedGenre = g.trim();
+            return trimmedGenre === 'Sci-Fi' ? 'Science-Fiction' : trimmedGenre;
+        });
     }
 
     escapeRegex(str) {
