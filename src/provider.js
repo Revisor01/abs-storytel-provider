@@ -11,64 +11,50 @@ class StorytelProvider {
         this.baseBookUrl = 'https://www.storytel.com/api/getBookInfoForContent.action';
         this.locale = 'en';
     }
-    
+
     setLocale(locale) {
         this.locale = locale;
     }
 
+    /**
+     * Ensures a value is a string and trims it. Used for cleaning up data and returns
+     * @param value
+     * @returns {string}
+     */
     ensureString(value) {
         if (value === null || value === undefined) return '';
         return String(value).trim();
     }
 
+    /**
+     * Upgrades the cover URL to a higher resolution
+     * @param url
+     * @returns {undefined|string}
+     */
     upgradeCoverUrl(url) {
         if (!url) return undefined;
         return `https://storytel.com${url.replace('320x320', '640x640')}`;
     }
 
-    cleanTitle(title, seriesName) {
-        if (!title) return '';
-
-        let cleanedTitle = title;
-        const patterns = [
-            /^.*?,\s*Folge\s*\d+:\s*/i,
-            /^.*?,\s*Band\s*\d+:\s*/i,
-            /^.*?\s+-\s+\d+:\s*/i,
-            /^.*?\s+\d+:\s*/i,
-            /^.*?,\s*Teil\s*\d+:\s*/i,
-            /^.*?,\s*Volume\s*\d+:\s*/i,
-            /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,
-            /,\s*Teil\s+\d+$/i,
-            /-\s*.*?(?:Reihe|Serie)\s+\d+$/i
-        ];
-
-        for (const pattern of patterns) {
-            cleanedTitle = cleanedTitle.replace(pattern, '');
-        }
-
-        if (seriesName) {
-            const seriesPattern = new RegExp(`^${seriesName}[\\s,-]*\\d*:?\\s*`, 'i');
-            cleanedTitle = cleanedTitle.replace(seriesPattern, '');
-        }
-
-        return cleanedTitle.trim();
-    }
-
-    cleanCategories(categories) {
-        if (!categories || !Array.isArray(categories)) return [];
-        return categories.filter(cat => !cat.match(/\d+\s*(bis|-)\s*\d+\s*(Jahre|Year|Age)/i));
-    }
-
-    normalizeGenre(genre) {
-        if (!genre) return '';
-        return genre.replace(/\bSci-Fi\b/g, 'Science-Fiction');
-    }
-    
+    /**
+     * Splits a genre by / or , and trims the resulting strings
+     * @param genre {string}
+     * @returns {*[]}
+     */
     splitGenre(genre) {
         if (!genre) return [];
-        return genre.split('/').map(g => this.normalizeGenre(g.trim()));
+        return genre.split(/[\/,]/).map(g => g.trim());
     }
 
+    escapeRegex(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /**
+     * Formats the book metadata to the ABS format
+     * @param bookData
+     * @returns {{title: (string|string), subtitle: *, author: (string|string), language: (string|string), genres: (*[]|undefined), tags: undefined, series: null, cover: string, duration: (number|undefined), narrator: (*|undefined), description: (string|string), publisher: (string|string), publishedYear: string | undefined, isbn: (string|string)}|null}
+     */
     formatBookMetadata(bookData) {
         const slb = bookData.slb;
         if (!slb || !slb.book) return null;
@@ -94,51 +80,133 @@ class StorytelProvider {
         let title = book.name;
         let subtitle = null;
 
-        const cleanupPatterns = {
-            prefixPatterns: [
-                /^.*?,\s*Folge\s*\d+:\s*/i,
-                /^.*?,\s*Band\s*\d+:\s*/i,
-                /^.*?\s+-\s+\d+:\s*/i,
-                /^.*?\s+\d+:\s*/i,
-                /^.*?,\s*Teil\s*\d+:\s*/i,
-                /^.*?,\s*Volume\s*\d+:\s*/i
-            ],
-            suffixPatterns: [
-                /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,
-                /,\s*Teil\s+\d+$/i,
-                /-\s*.*?(?:Reihe|Serie)\s+\d+$/i
-            ]
-        };
+        // These should contain all possible patterns for coutries.
+        // This list is not final as these are mostly just translations and tested with some few other books
+        // This should cover all Storytel regions
+        const patterns = [
+            // Current Patterns
+            /^.*?,\s*Folge\s*\d+:\s*/i,
+            /^.*?,\s*Band\s*\d+:\s*/i,
+            /^.*?\s+-\s+\d+:\s*/i,
+            /^.*?\s+\d+:\s*/i,
+            /^.*?,\s*Teil\s*\d+:\s*/i,
+            /^.*?,\s*Volume\s*\d+:\s*/i,
+            /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,
+            /,\s*Teil\s+\d+$/i,
+            /-\s*.*?(?:Reihe|Serie)\s+\d+$/i,
 
-        cleanupPatterns.prefixPatterns.forEach(pattern => {
-            title = title.replace(pattern, '');
-        });
-        cleanupPatterns.suffixPatterns.forEach(pattern => {
+            // Belgium / Netherlands
+            /^.*?,\s*Aflevering\s*\d+:\s*/i,
+            /^.*?,\s*Deel\s*\d+:\s*/i,
+            // Brazil
+            /^.*?,\s*Episódio\s*\d+:\s*/i,
+            /^.*?,\s*Parte\s*\d+:\s*/i,
+            // Bulgaria
+            /^.*?,\s*епизод\s*\d+:\s*/i,
+            /^.*?,\s*том\s*\d+:\s*/i,
+            /^.*?,\s*част\s*\d+:\s*/i,
+            // Colombia / Spain
+            /^.*?,\s*Episodio\s*\d+:\s*/i,
+            /^.*?,\s*Volumen\s*\d+:\s*/i,
+
+            // Denmark
+            /^.*?,\s*Afsnit\s*\d+:\s*/i,
+            /^.*?,\s*Bind\s*\d+:\s*/i,
+            /^.*?,\s*Del\s*\d+:\s*/i,
+
+            // Egypt / Saudi Arabia / United Arab Emirates
+            /^.*?,\s*حلقة\s*\d+:\s*/i,
+            /^.*?,\s*مجلد\s*\d+:\s*/i,
+            /^.*?,\s*جزء\s*\d+:\s*/i,
+
+            // Finland
+            /^.*?,\s*Jakso\s*\d+:\s*/i,
+            /^.*?,\s*Volyymi\s*\d+:\s*/i,
+            /^.*?,\s*Osa\s*\d+:\s*/i,
+
+            // France
+            /^.*?,\s*Épisode\s*\d+:\s*/i,
+            /^.*?,\s*Tome\s*\d+:\s*/i,
+            /^.*?,\s*Partie\s*\d+:\s*/i,
+
+            // Indonesia
+            /^.*?,\s*Episode\s*\d+:\s*/i,
+            /^.*?,\s*Bagian\s*\d+:\s*/i,
+
+            // Israel
+            /^.*?,\s*פרק\s*\d+:\s*/i,
+            /^.*?,\s*כרך\s*\d+:\s*/i,
+            /^.*?,\s*חלק\s*\d+:\s*/i,
+
+            // India
+            /^.*?,\s*कड़ी\s*\d+:\s*/i,
+            /^.*?,\s*खण्ड\s*\d+:\s*/i,
+            /^.*?,\s*भाग\s*\d+:\s*/i,
+
+            // Iceland
+            /^.*?,\s*Þáttur\s*\d+:\s*/i,
+            /^.*?,\s*Bindi\s*\d+:\s*/i,
+            /^.*?,\s*Hluti\s*\d+:\s*/i,
+
+            // Poland
+            /^.*?,\s*Odcinek\s*\d+:\s*/i,
+            /^.*?,\s*Tom\s*\d+:\s*/i,
+            /^.*?,\s*Część\s*\d+:\s*/i,
+
+            // Swede
+            /^.*?,\s*Avsnitt\s*\d+:\s*/i,
+        ];
+
+        // **Hier füge ich deine deutschen Regex wieder ein:**
+        const germanPatterns = [
+            /^.*?,\s*Folge\s*\d+:\s*/i,
+            /^.*?,\s*Band\s*\d+:\s*/i,
+            /^.*?\s+-\s+\d+:\s*/i,
+            /^.*?\s+\d+:\s*/i,
+            /^.*?,\s*Teil\s*\d+:\s*/i,
+            /^.*?,\s*Volume\s*\d+:\s*/i,
+            /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,
+            /,\s*Teil\s+\d+$/i,
+            /-\s*.*?(?:Reihe|Serie)\s+\d+$/i
+        ];
+
+        // Kombiniere beide Arrays:
+        const allPatterns = [...patterns, ...germanPatterns];
+
+        allPatterns.forEach(pattern => {
             title = title.replace(pattern, '');
         });
 
         if (seriesInfo) {
-            subtitle = `${seriesName}, ${book.seriesOrder}`;
+            subtitle = `${seriesName} ${book.seriesOrder}`;
 
+            // Removes series from title name
             if (title.includes(seriesName)) {
-                const beforeSeriesMatch = title.match(new RegExp(`^(.+?)[-,]\\s*${seriesName}`));
+                const safeSeriesName = this.escapeRegex(seriesName);
+                const regex = new RegExp(`^(.+?)[-,]\\s*${safeSeriesName}`, 'i');
+
+                const beforeSeriesMatch = title.match(regex);
                 if (beforeSeriesMatch) {
                     title = beforeSeriesMatch[1].trim();
                 }
-            }
 
-            cleanupPatterns.prefixPatterns.forEach(pattern => {
-                title = title.replace(pattern, '');
-            });
-            cleanupPatterns.suffixPatterns.forEach(pattern => {
-                title = title.replace(pattern, '');
-            });
+                title = title.replace(seriesName, '');
+            }
         }
-        else if (title.includes(':')) {
-            const parts = title.split(':');
-            title = parts[0].trim();
-            subtitle = parts[1].trim();
+
+        // Check if there is a subtitle now
+        if (title.includes(':') || title.includes('-')) {
+            const parts = title.split(/[:\-]/);
+            if (parts[1] && parts[1].trim().length >= 3) {
+                title = parts[0].trim();
+                subtitle = parts[1].trim();
+            }
         }
+
+        // This should be redundant, but just in case
+        allPatterns.forEach(pattern => {
+            title = title.replace(pattern, '');
+        });
 
         title = title.trim();
         if (subtitle) {
@@ -149,6 +217,7 @@ class StorytelProvider {
             ? this.splitGenre(this.ensureString(book.category.title))
             : [];
 
+        // This is completely redundant, as it does not provide anything, but spam ABS
         const tags = [...genres];
 
         const metadata = {
@@ -157,25 +226,16 @@ class StorytelProvider {
             author: author,
             language: this.ensureString(book.language?.isoValue || this.locale),
             genres: genres.length > 0 ? genres : undefined,
-            tags: tags.length > 0 ? tags : undefined,
+            tags: undefined, // Redundant, might be removed
             series: seriesInfo,
-            cover: this.upgradeCoverUrl(book.largeCover)
+            cover: this.upgradeCoverUrl(book.largeCover),
+            duration: abook ? (abook.length ? Math.floor(abook.length / 60000) : undefined) : undefined,
+            narrator: abook ? abook.narratorAsString || undefined : undefined,
+            description: this.ensureString(abook ? abook.description : ebook?.description),
+            publisher: this.ensureString(abook ? abook.publisher?.name : ebook?.publisher?.name),
+            publishedYear: (abook ? abook.releaseDateFormat : ebook?.releaseDateFormat)?.substring(0, 4),
+            isbn: this.ensureString(abook ? abook.isbn : ebook?.isbn)
         };
-
-        if (abook) {
-            metadata.duration = abook.length ? Math.floor(abook.length / 60000) : undefined;
-            metadata.narrator = abook.narratorAsString || undefined;
-            metadata.description = this.ensureString(abook.description);
-            metadata.publisher = this.ensureString(abook.publisher?.name);
-            metadata.publishedYear = abook.releaseDateFormat?.substring(0, 4);
-            metadata.isbn = this.ensureString(abook.isbn);
-        }
-        else if (ebook) {
-            metadata.description = this.ensureString(ebook.description);
-            metadata.publisher = this.ensureString(ebook.publisher?.name);
-            metadata.publishedYear = ebook.releaseDateFormat?.substring(0, 4);
-            metadata.isbn = this.ensureString(ebook.isbn);
-        }
 
         Object.keys(metadata).forEach(key =>
             metadata[key] === undefined && delete metadata[key]
@@ -184,11 +244,11 @@ class StorytelProvider {
         return metadata;
     }
 
-    async searchBooks(query, author = '') {
+    async searchBooks(query, author = '', locale) {
         const cleanQuery = query.split(':')[0].trim();
         const formattedQuery = cleanQuery.replace(/\s+/g, '+');
 
-        const cacheKey = `${formattedQuery}-${author}-${this.locale}`;
+        const cacheKey = `${formattedQuery}-${author}-${locale}`;
 
         const cachedResult = cache.get(cacheKey);
         if (cachedResult) {
@@ -198,11 +258,11 @@ class StorytelProvider {
         try {
             const searchResponse = await axios.get(this.baseSearchUrl, {
                 params: {
-                    request_locale: this.locale,
+                    request_locale: locale,
                     q: formattedQuery
                 },
                 headers: {
-                    'User-Agent': 'Storytel'
+                    'User-Agent': 'Storytel ABS-Scraper'
                 }
             });
 
@@ -210,17 +270,17 @@ class StorytelProvider {
                 return { matches: [] };
             }
 
-            const books = searchResponse.data.books;
+            const books = searchResponse.data.books.slice(0, 5);
+            console.log(`Found ${books.length} books in search results`);
 
-            const matches = await Promise.all(
-                books.slice(0, 5).map(async book => {
-                    if (!book.book || !book.book.id) return null;
-                    const bookDetails = await this.getBookDetails(book.book.id);
-                    if (!bookDetails) return null;
-                    
-                    return this.formatBookMetadata(bookDetails);
-                })
-            );
+
+            const matches = await Promise.all(books.map(async book => {
+                if (!book.book || !book.book.id) return null;
+                const bookDetails = await this.getBookDetails(book.book.id, locale);
+                if (!bookDetails) return null;
+
+                return this.formatBookMetadata(bookDetails);
+            }));
 
             const validMatches = matches.filter(match => match !== null);
 
@@ -233,15 +293,15 @@ class StorytelProvider {
         }
     }
 
-    async getBookDetails(bookId) {
+    async getBookDetails(bookId, locale) {
         try {
             const response = await axios.get(this.baseBookUrl, {
                 params: {
                     bookId: bookId,
-                    request_locale: this.locale
+                    request_locale: locale
                 },
                 headers: {
-                    'User-Agent': 'Storytel'
+                    'User-Agent': 'Storytel ABS-Scraper'
                 }
             });
 
