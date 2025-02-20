@@ -50,6 +50,20 @@ The provider supports different Storytel regions through the URL path. Simply ap
 - Swedish: `http://storytel-provider:3000/se`
 - English (default): `http://storytel-provider:3000/en`
 
+## Authentication
+
+This provider includes authentication to prevent unauthorized access. To use the provider, you must set the `AUTH` environment variable to a secret value.
+
+To set the `AUTH` environment variable in Docker Compose, add the following to your `docker-compose.yml` file or use `.env`:
+
+```yaml
+AUTH: "your-secret-key"
+```
+
+Replace `"your-secret-key"` with your actual secret key.
+
+To access the provider, you must include the `Authorization` header in your requests with the value of the `AUTH` environment variable.
+
 ## Metadata Processing
 ### Title Handling
 - Removes format indicators
