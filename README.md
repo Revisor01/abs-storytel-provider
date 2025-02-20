@@ -57,4 +57,4 @@ A metadata provider that fetches book information from Storytel's API.
 
 ## License
 
-MIT License
+MIT License (Set by Revisor01.  No license file was provided in the repository)
