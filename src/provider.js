@@ -6,10 +6,14 @@ const cache = new NodeCache({
 });
 
 class StorytelProvider {
-    constructor(url) {
+    constructor() {
         this.baseSearchUrl = 'https://www.storytel.com/api/search.action';
         this.baseBookUrl = 'https://www.storytel.com/api/getBookInfoForContent.action';
-        this.locale = url.split('/').pop();
+        this.locale = 'en';
+    }
+    
+    setLocale(locale) {
+        this.locale = locale;
     }
 
     ensureString(value) {
