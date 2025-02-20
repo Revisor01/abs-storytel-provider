@@ -55,8 +55,13 @@ class StorytelProvider {
 
         let title = book.name;
         let subtitle = null;
-        
+
+
+        // These should contain all possible patterns for coutries.
+        // This list is not final as these are mostly just translations and tested with some few other books
+        // This should cover all Storytel regions
         const patterns = [
+            // Current Patterns
             /^.*?,\s*Folge\s*\d+:\s*/i,
             /^.*?,\s*Band\s*\d+:\s*/i,
             /^.*?\s+-\s+\d+:\s*/i,
@@ -65,8 +70,70 @@ class StorytelProvider {
             /^.*?,\s*Volume\s*\d+:\s*/i,
             /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,
             /,\s*Teil\s+\d+$/i,
-            /-\s*.*?(?:Reihe|Serie)\s+\d+$/i
-        ]
+            /-\s*.*?(?:Reihe|Serie)\s+\d+$/i,
+
+            // Belgium / Netherlands
+            /^.*?,\s*Aflevering\s*\d+:\s*/i,
+            /^.*?,\s*Deel\s*\d+:\s*/i,
+            // Brazil
+            /^.*?,\s*Episódio\s*\d+:\s*/i,
+            /^.*?,\s*Parte\s*\d+:\s*/i,
+            // Bulgaria
+            /^.*?,\s*епизод\s*\d+:\s*/i,
+            /^.*?,\s*том\s*\d+:\s*/i,
+            /^.*?,\s*част\s*\d+:\s*/i,
+            // Colombia / Spain
+            /^.*?,\s*Episodio\s*\d+:\s*/i,
+            /^.*?,\s*Volumen\s*\d+:\s*/i,
+
+            // Denmark
+            /^.*?,\s*Afsnit\s*\d+:\s*/i,
+            /^.*?,\s*Bind\s*\d+:\s*/i,
+            /^.*?,\s*Del\s*\d+:\s*/i,
+
+            // Egypt / Saudi Arabia / United Arab Emirates
+            /^.*?,\s*حلقة\s*\d+:\s*/i,
+            /^.*?,\s*مجلد\s*\d+:\s*/i,
+            /^.*?,\s*جزء\s*\d+:\s*/i,
+
+            // Finland
+            /^.*?,\s*Jakso\s*\d+:\s*/i,
+            /^.*?,\s*Volyymi\s*\d+:\s*/i,
+            /^.*?,\s*Osa\s*\d+:\s*/i,
+
+            // France
+            /^.*?,\s*Épisode\s*\d+:\s*/i,
+            /^.*?,\s*Tome\s*\d+:\s*/i,
+            /^.*?,\s*Partie\s*\d+:\s*/i,
+
+            // Indonesia
+            /^.*?,\s*Episode\s*\d+:\s*/i,
+            /^.*?,\s*Bagian\s*\d+:\s*/i,
+
+            // Israel
+            /^.*?,\s*פרק\s*\d+:\s*/i,
+            /^.*?,\s*כרך\s*\d+:\s*/i,
+            /^.*?,\s*חלק\s*\d+:\s*/i,
+
+            // India
+            /^.*?,\s*कड़ी\s*\d+:\s*/i,
+            /^.*?,\s*खण्ड\s*\d+:\s*/i,
+            /^.*?,\s*भाग\s*\d+:\s*/i,
+
+            // Iceland
+            /^.*?,\s*Þáttur\s*\d+:\s*/i,
+            /^.*?,\s*Bindi\s*\d+:\s*/i,
+            /^.*?,\s*Hluti\s*\d+:\s*/i,
+
+            // Poland
+            /^.*?,\s*Odcinek\s*\d+:\s*/i,
+            /^.*?,\s*Tom\s*\d+:\s*/i,
+            /^.*?,\s*Część\s*\d+:\s*/i,
+
+            // Swede
+            /^.*?,\s*Avsnitt\s*\d+:\s*/i,
+        ];
+
 
         patterns.forEach(pattern => {
             title = title.replace(pattern, '');
