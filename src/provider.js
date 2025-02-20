@@ -59,9 +59,14 @@ class StorytelProvider {
         return categories.filter(cat => !cat.match(/\d+\s*(bis|-)\s*\d+\s*(Jahre|Year|Age)/i));
     }
 
+    normalizeGenre(genre) {
+        if (!genre) return '';
+        return genre.replace(/\bSci-Fi\b/g, 'Science-Fiction');
+    }
+    
     splitGenre(genre) {
         if (!genre) return [];
-        return genre.split('/').map(g => g.trim());
+        return genre.split('/').map(g => this.normalizeGenre(g.trim()));
     }
 
     formatBookMetadata(bookData) {
@@ -185,17 +190,12 @@ class StorytelProvider {
 
         const cacheKey = `${formattedQuery}-${author}-${this.locale}`;
 
-        console.log(`Original query: "${query}"`);
-        console.log(`Cleaned query: "${cleanQuery}"`);
-
         const cachedResult = cache.get(cacheKey);
         if (cachedResult) {
             return cachedResult;
         }
 
         try {
-            console.log(`Searching for: "${cleanQuery}" by "${author}" in locale: ${this.locale}`);
-
             const searchResponse = await axios.get(this.baseSearchUrl, {
                 params: {
                     request_locale: this.locale,
@@ -207,23 +207,22 @@ class StorytelProvider {
             });
 
             if (!searchResponse.data || !searchResponse.data.books) {
-                console.log('No books found');
                 return { matches: [] };
             }
 
             const books = searchResponse.data.books;
-            console.log(`Found ${books.length} books in search results`);
 
-            const matches = await Promise.all(books.map(async book => {
-                if (!book.book || !book.book.id) return null;
-                const bookDetails = await this.getBookDetails(book.book.id);
-                if (!bookDetails) return null;
-
-                return this.formatBookMetadata(bookDetails);
-            }));
+            const matches = await Promise.all(
+                books.slice(0, 5).map(async book => {
+                    if (!book.book || !book.book.id) return null;
+                    const bookDetails = await this.getBookDetails(book.book.id);
+                    if (!bookDetails) return null;
+                    
+                    return this.formatBookMetadata(bookDetails);
+                })
+            );
 
             const validMatches = matches.filter(match => match !== null);
-            console.log(`Processed ${validMatches.length} valid matches`);
 
             const result = { matches: validMatches };
             cache.set(cacheKey, result);
