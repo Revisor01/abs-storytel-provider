@@ -9,16 +9,18 @@ app.use(cors());
 
 const provider = new StorytelProvider();
 
-app.get('/search', async (req, res) => {
+app.get('/:locale/search', async (req, res) => {
   try {
     console.log('Received search request:', req.query);
     const query = req.query.query;
     const author = req.query.author;
+    const { locale } = req.params;
 
     if (!query) {
       return res.status(400).json({ error: 'Query parameter is required' });
     }
 
+    provider.setLocale(locale);
     const results = await provider.searchBooks(query, author);
     console.log(`Sending ${results.matches.length} matches back to client`);
     res.json(results);
