@@ -67,4 +67,6 @@ The provider supports different Storytel regions through the URL path. Simply ap
 
 ## License
 
-MIT License (Set by Revisor01.  No license file was provided in the repository)
+MIT License
+
+See the [LICENSE](LICENSE) file for details.
