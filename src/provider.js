@@ -6,10 +6,10 @@ const cache = new NodeCache({
 });
 
 class StorytelProvider {
-    constructor() {
+    constructor(url) {
         this.baseSearchUrl = 'https://www.storytel.com/api/search.action';
         this.baseBookUrl = 'https://www.storytel.com/api/getBookInfoForContent.action';
-        this.defaultLocale = process.env.STORYTEL_LOCALE || 'de';
+        this.locale = url.split('/').pop();
     }
 
     ensureString(value) {
@@ -50,21 +50,14 @@ class StorytelProvider {
         return cleanedTitle.trim();
     }
 
-    // Helper function to clean age categories
     cleanCategories(categories) {
         if (!categories || !Array.isArray(categories)) return [];
         return categories.filter(cat => !cat.match(/\d+\s*(bis|-)\s*\d+\s*(Jahre|Year|Age)/i));
     }
 
     splitGenre(genre) {
-        const splits = {
-            'Fantasy/Sci-Fi': ['Fantasy', 'Science-Fiction'],
-            'Fantasy/Science-Fiction': ['Fantasy', 'Science-Fiction'],
-            'Sci-Fi/Fantasy': ['Science-Fiction', 'Fantasy'],
-            'Poesie/Lyrik': ['Poesie', 'Lyrik']
-            // Weitere Kombinationen können hier hinzugefügt werden
-        };
-        return splits[genre] || [genre];
+        if (!genre) return [];
+        return genre.split('/').map(g => g.trim());
     }
 
     formatBookMetadata(bookData) {
@@ -77,7 +70,6 @@ class StorytelProvider {
 
         if (!abook && !ebook) return null;
 
-        // Series Info
         let seriesInfo = null;
         let seriesName = null;
         if (book.series && book.series.length > 0 && book.seriesOrder) {
@@ -88,16 +80,13 @@ class StorytelProvider {
             }];
         }
 
-        // Autor-Handling
         const author = this.ensureString(book.authorsAsString);
 
-        // Title und Subtitle handling
         let title = book.name;
         let subtitle = null;
 
-        // Patterns für Titel-Bereinigung
         const cleanupPatterns = {
-            prefixPatterns: [  // Patterns die am Anfang matchen (^)
+            prefixPatterns: [
                 /^.*?,\s*Folge\s*\d+:\s*/i,
                 /^.*?,\s*Band\s*\d+:\s*/i,
                 /^.*?\s+-\s+\d+:\s*/i,
@@ -105,14 +94,13 @@ class StorytelProvider {
                 /^.*?,\s*Teil\s*\d+:\s*/i,
                 /^.*?,\s*Volume\s*\d+:\s*/i
             ],
-            suffixPatterns: [  // Patterns die am Ende matchen ($)
+            suffixPatterns: [
                 /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,
                 /,\s*Teil\s+\d+$/i,
                 /-\s*.*?(?:Reihe|Serie)\s+\d+$/i
             ]
         };
 
-        // Bereinige den Titel
         cleanupPatterns.prefixPatterns.forEach(pattern => {
             title = title.replace(pattern, '');
         });
@@ -120,20 +108,16 @@ class StorytelProvider {
             title = title.replace(pattern, '');
         });
 
-        // Wenn es eine Serie ist
         if (seriesInfo) {
             subtitle = `${seriesName}, ${book.seriesOrder}`;
 
-            // Wenn der Serientitel im Haupttitel vorkommt
             if (title.includes(seriesName)) {
-                // Nimm alles bis zum Serientitel (inklusive Trenner wie "-" oder ",")
                 const beforeSeriesMatch = title.match(new RegExp(`^(.+?)[-,]\\s*${seriesName}`));
                 if (beforeSeriesMatch) {
                     title = beforeSeriesMatch[1].trim();
                 }
             }
 
-            // Bereinige nochmal eventuell verbliebene Serienbezeichnungen
             cleanupPatterns.prefixPatterns.forEach(pattern => {
                 title = title.replace(pattern, '');
             });
@@ -141,49 +125,42 @@ class StorytelProvider {
                 title = title.replace(pattern, '');
             });
         }
-        // Wenn kein Serie aber ein Untertitel vorhanden
         else if (title.includes(':')) {
             const parts = title.split(':');
             title = parts[0].trim();
             subtitle = parts[1].trim();
         }
 
-        // Finaler Trim
         title = title.trim();
         if (subtitle) {
             subtitle = subtitle.trim();
         }
 
-        // Genres sind Hauptkategorien
         const genres = book.category
             ? this.splitGenre(this.ensureString(book.category.title))
             : [];
 
-        // Tags sind die gleichen wie Genres
         const tags = [...genres];
 
-        // Erstelle das Metadata-Objekt
         const metadata = {
             title: this.ensureString(title),
             subtitle: subtitle,
             author: author,
-            language: this.ensureString(book.language?.isoValue || 'de'),
+            language: this.ensureString(book.language?.isoValue || this.locale),
             genres: genres.length > 0 ? genres : undefined,
             tags: tags.length > 0 ? tags : undefined,
             series: seriesInfo,
             cover: this.upgradeCoverUrl(book.largeCover)
         };
 
-        // Audio-spezifische Metadaten
         if (abook) {
-            metadata.duration = abook.length ? Math.floor(abook.length / 60000) : undefined; // ms zu Minuten
+            metadata.duration = abook.length ? Math.floor(abook.length / 60000) : undefined;
             metadata.narrator = abook.narratorAsString || undefined;
             metadata.description = this.ensureString(abook.description);
             metadata.publisher = this.ensureString(abook.publisher?.name);
             metadata.publishedYear = abook.releaseDateFormat?.substring(0, 4);
             metadata.isbn = this.ensureString(abook.isbn);
         }
-        // eBook-spezifische Metadaten
         else if (ebook) {
             metadata.description = this.ensureString(ebook.description);
             metadata.publisher = this.ensureString(ebook.publisher?.name);
@@ -191,7 +168,6 @@ class StorytelProvider {
             metadata.isbn = this.ensureString(ebook.isbn);
         }
 
-        // Entferne undefined Werte
         Object.keys(metadata).forEach(key =>
             metadata[key] === undefined && delete metadata[key]
         );
@@ -200,13 +176,10 @@ class StorytelProvider {
     }
 
     async searchBooks(query, author = '') {
-        // Bereinige die Suche von Untertiteln
         const cleanQuery = query.split(':')[0].trim();
-
         const formattedQuery = cleanQuery.replace(/\s+/g, '+');
-        const locale = this.defaultLocale; // Verwende das Locale aus der Umgebungsvariable
 
-        const cacheKey = `${formattedQuery}-${author}-${locale}`;
+        const cacheKey = `${formattedQuery}-${author}-${this.locale}`;
 
         console.log(`Original query: "${query}"`);
         console.log(`Cleaned query: "${cleanQuery}"`);
@@ -217,11 +190,11 @@ class StorytelProvider {
         }
 
         try {
-            console.log(`Searching for: "${cleanQuery}" by "${author}" in locale: ${locale}`);
+            console.log(`Searching for: "${cleanQuery}" by "${author}" in locale: ${this.locale}`);
 
             const searchResponse = await axios.get(this.baseSearchUrl, {
                 params: {
-                    request_locale: locale,
+                    request_locale: this.locale,
                     q: formattedQuery
                 },
                 headers: {
@@ -239,7 +212,7 @@ class StorytelProvider {
 
             const matches = await Promise.all(books.map(async book => {
                 if (!book.book || !book.book.id) return null;
-                const bookDetails = await this.getBookDetails(book.book.id, locale);
+                const bookDetails = await this.getBookDetails(book.book.id);
                 if (!bookDetails) return null;
 
                 return this.formatBookMetadata(bookDetails);
@@ -257,12 +230,12 @@ class StorytelProvider {
         }
     }
 
-    async getBookDetails(bookId, locale) {
+    async getBookDetails(bookId) {
         try {
             const response = await axios.get(this.baseBookUrl, {
                 params: {
                     bookId: bookId,
-                    request_locale: locale
+                    request_locale: this.locale
                 },
                 headers: {
                     'User-Agent': 'Storytel'
