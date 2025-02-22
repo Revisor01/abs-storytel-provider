@@ -5,6 +5,8 @@ A metadata provider that fetches book information from Storytel's API.
 - High-resolution cover images (640x640)
 - Smart title and series handling
 - Multi-region support
+- Separate audiobook and book endpoints
+- Audiobook-specific metadata and statistics
 
 ## Installation
 ### Using Docker (recommended)
@@ -41,8 +43,17 @@ A metadata provider that fetches book information from Storytel's API.
 ## Configuration in Audiobookshelf
 1. Go to Settings -> Metadata in Audiobookshelf.
 2. Add Custom Provider.
-3. URL: `http://abs-storytel-provider:3000/<lang-code>` (e.g. `http://abs-storytel-provider:3000/de/`)
-For specific regions, use the region code (e.g., de, se, en).  See "Region Support" below.
+3. Choose one of the following endpoints:
+   - All media: `http://abs-storytel-provider:3000/<region>` (e.g. `http://abs-storytel-provider:3000/de`)
+   - Books only: `http://abs-storytel-provider:3000/<region>/book`
+   - Audiobooks only: `http://abs-storytel-provider:3000/<region>/audiobook`
+
+## Endpoints
+The provider offers three different endpoints:
+
+- `/<region>` - Returns all available media (books and audiobooks)
+- `/<region>/book` - Same as above, returns only ebooks
+- `/<region>/audiobook` - Returns only audiobooks
 
 ## Region Support
 The provider supports different Storytel regions through the URL path. Simply append your region code to the base URL:
@@ -57,7 +68,10 @@ This provider includes authentication to prevent unauthorized access. To use the
 To set the `AUTH` environment variable in Docker Compose, add the following to your `docker-compose.yml` file or use `.env`:
 
 ```yaml
-AUTH: "your-secret-key"
+services:
+  abs-storytel-provider:
+    environment:
+      - AUTH=your-secret-key
 ```
 
 Replace `"your-secret-key"` with your actual secret key.
@@ -75,9 +89,17 @@ To access the provider, you must include the `Authorization` header in your requ
 - Formats series information as "Series Name, Number"
 - Maintains clean titles without series markers
 
+### Audiobook-Specific Metadata
+- Duration in minutes
+- Narrator information
+- Audio format and bitrate
+- Publisher details
+- Release year
+
 ## Known Limitations
 - Search results depend on Storytel API availability
 - Some metadata fields might be unavailable depending on the book
+- Maximum of 5 results per search
 
 ## License
 

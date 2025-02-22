@@ -12,6 +12,10 @@ class StorytelProvider {
         this.locale = 'en';
     }
 
+    /**
+     * Sets the locale for the provider
+     * @param locale {string} The locale to set
+     */
     setLocale(locale) {
         this.locale = locale;
     }
@@ -49,6 +53,11 @@ class StorytelProvider {
         });
     }
 
+    /**
+     * Escapes special characters in RegEx patterns
+     * @param str {string} String to escape
+     * @returns {string}
+     */
     escapeRegex(str) {
         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
@@ -83,99 +92,91 @@ class StorytelProvider {
         let title = book.name;
         let subtitle = null;
 
-        // These should contain all possible patterns for coutries.
-        // This list is not final as these are mostly just translations and tested with some few other books
-        // This should cover all Storytel regions
+        // These patterns match various series and volume indicators across different languages
+        // Current Patterns for all Storytel regions
         const patterns = [
-            // Current Patterns
-            /^.*?,\s*Folge\s*\d+:\s*/i,
-            /^.*?,\s*Band\s*\d+:\s*/i,
-            /^.*?\s+-\s+\d+:\s*/i,
-            /^.*?\s+\d+:\s*/i,
-            /^.*?,\s*Teil\s*\d+:\s*/i,
-            /^.*?,\s*Volume\s*\d+:\s*/i,
-            /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,
-            /,\s*Teil\s+\d+$/i,
-            /-\s*.*?(?:Reihe|Serie)\s+\d+$/i,
 
             // Belgium / Netherlands
-            /^.*?,\s*Aflevering\s*\d+:\s*/i,
-            /^.*?,\s*Deel\s*\d+:\s*/i,
+            /^.*?,\s*Aflevering\s*\d+:\s*/i,      // Dutch: "Aflevering" (Episode)
+            /^.*?,\s*Deel\s*\d+:\s*/i,            // Dutch: "Deel" (Part)
+
             // Brazil
-            /^.*?,\s*Episódio\s*\d+:\s*/i,
-            /^.*?,\s*Parte\s*\d+:\s*/i,
+            /^.*?,\s*Episódio\s*\d+:\s*/i,        // Portuguese: "Episódio" (Episode)
+            /^.*?,\s*Parte\s*\d+:\s*/i,           // Portuguese: "Parte" (Part)
+
             // Bulgaria
-            /^.*?,\s*епизод\s*\d+:\s*/i,
-            /^.*?,\s*том\s*\d+:\s*/i,
-            /^.*?,\s*част\s*\d+:\s*/i,
+            /^.*?,\s*епизод\s*\d+:\s*/i,          // Bulgarian: "епизод" (Episode)
+            /^.*?,\s*том\s*\d+:\s*/i,             // Bulgarian: "том" (Volume)
+            /^.*?,\s*част\s*\d+:\s*/i,            // Bulgarian: "част" (Part)
+
             // Colombia / Spain
-            /^.*?,\s*Episodio\s*\d+:\s*/i,
-            /^.*?,\s*Volumen\s*\d+:\s*/i,
+            /^.*?,\s*Episodio\s*\d+:\s*/i,        // Spanish: "Episodio" (Episode)
+            /^.*?,\s*Volumen\s*\d+:\s*/i,         // Spanish: "Volumen" (Volume)
 
             // Denmark
-            /^.*?,\s*Afsnit\s*\d+:\s*/i,
-            /^.*?,\s*Bind\s*\d+:\s*/i,
-            /^.*?,\s*Del\s*\d+:\s*/i,
+            /^.*?,\s*Afsnit\s*\d+:\s*/i,          // Danish: "Afsnit" (Episode)
+            /^.*?,\s*Bind\s*\d+:\s*/i,            // Danish: "Bind" (Volume)
+            /^.*?,\s*Del\s*\d+:\s*/i,             // Danish: "Del" (Part)
 
             // Egypt / Saudi Arabia / United Arab Emirates
-            /^.*?,\s*حلقة\s*\d+:\s*/i,
-            /^.*?,\s*مجلد\s*\d+:\s*/i,
-            /^.*?,\s*جزء\s*\d+:\s*/i,
+            /^.*?,\s*حلقة\s*\d+:\s*/i,            // Arabic: "حلقة" (Episode)
+            /^.*?,\s*مجلد\s*\d+:\s*/i,            // Arabic: "مجلد" (Volume)
+            /^.*?,\s*جزء\s*\d+:\s*/i,             // Arabic: "جزء" (Part)
 
             // Finland
-            /^.*?,\s*Jakso\s*\d+:\s*/i,
-            /^.*?,\s*Volyymi\s*\d+:\s*/i,
-            /^.*?,\s*Osa\s*\d+:\s*/i,
+            /^.*?,\s*Jakso\s*\d+:\s*/i,           // Finnish: "Jakso" (Episode)
+            /^.*?,\s*Volyymi\s*\d+:\s*/i,         // Finnish: "Volyymi" (Volume)
+            /^.*?,\s*Osa\s*\d+:\s*/i,             // Finnish: "Osa" (Part)
 
             // France
-            /^.*?,\s*Épisode\s*\d+:\s*/i,
-            /^.*?,\s*Tome\s*\d+:\s*/i,
-            /^.*?,\s*Partie\s*\d+:\s*/i,
+            /^.*?,\s*Épisode\s*\d+:\s*/i,         // French: "Épisode" (Episode)
+            /^.*?,\s*Tome\s*\d+:\s*/i,            // French: "Tome" (Volume)
+            /^.*?,\s*Partie\s*\d+:\s*/i,          // French: "Partie" (Part)
 
             // Indonesia
-            /^.*?,\s*Episode\s*\d+:\s*/i,
-            /^.*?,\s*Bagian\s*\d+:\s*/i,
+            /^.*?,\s*Episode\s*\d+:\s*/i,         // Indonesian: "Episode"
+            /^.*?,\s*Bagian\s*\d+:\s*/i,          // Indonesian: "Bagian" (Part)
 
             // Israel
-            /^.*?,\s*פרק\s*\d+:\s*/i,
-            /^.*?,\s*כרך\s*\d+:\s*/i,
-            /^.*?,\s*חלק\s*\d+:\s*/i,
+            /^.*?,\s*פרק\s*\d+:\s*/i,             // Hebrew: "פרק" (Chapter)
+            /^.*?,\s*כרך\s*\d+:\s*/i,             // Hebrew: "כרך" (Volume)
+            /^.*?,\s*חלק\s*\d+:\s*/i,             // Hebrew: "חלק" (Part)
 
             // India
-            /^.*?,\s*कड़ी\s*\d+:\s*/i,
-            /^.*?,\s*खण्ड\s*\d+:\s*/i,
-            /^.*?,\s*भाग\s*\d+:\s*/i,
+            /^.*?,\s*कड़ी\s*\d+:\s*/i,             // Hindi: "कड़ी" (Episode)
+            /^.*?,\s*खण्ड\s*\d+:\s*/i,            // Hindi: "खण्ड" (Volume)
+            /^.*?,\s*भाग\s*\d+:\s*/i,             // Hindi: "भाग" (Part)
 
             // Iceland
-            /^.*?,\s*Þáttur\s*\d+:\s*/i,
-            /^.*?,\s*Bindi\s*\d+:\s*/i,
-            /^.*?,\s*Hluti\s*\d+:\s*/i,
+            /^.*?,\s*Þáttur\s*\d+:\s*/i,          // Icelandic: "Þáttur" (Episode)
+            /^.*?,\s*Bindi\s*\d+:\s*/i,           // Icelandic: "Bindi" (Volume)
+            /^.*?,\s*Hluti\s*\d+:\s*/i,           // Icelandic: "Hluti" (Part)
 
             // Poland
-            /^.*?,\s*Odcinek\s*\d+:\s*/i,
-            /^.*?,\s*Tom\s*\d+:\s*/i,
-            /^.*?,\s*Część\s*\d+:\s*/i,
+            /^.*?,\s*Odcinek\s*\d+:\s*/i,         // Polish: "Odcinek" (Episode)
+            /^.*?,\s*Tom\s*\d+:\s*/i,             // Polish: "Tom" (Volume)
+            /^.*?,\s*Część\s*\d+:\s*/i,           // Polish: "Część" (Part)
 
-            // Swede
-            /^.*?,\s*Avsnitt\s*\d+:\s*/i,
+            // Sweden
+            /^.*?,\s*Avsnitt\s*\d+:\s*/i,         // Swedish: "Avsnitt" (Episode)
         ];
 
-        // **Hier füge ich deine deutschen Regex wieder ein:**
+        // Additional German patterns for special cases
         const germanPatterns = [
-            /^.*?,\s*Folge\s*\d+:\s*/i,
-            /^.*?,\s*Band\s*\d+:\s*/i,
-            /^.*?\s+-\s+\d+:\s*/i,
-            /^.*?\s+\d+:\s*/i,
-            /^.*?,\s*Teil\s*\d+:\s*/i,
-            /^.*?,\s*Volume\s*\d+:\s*/i,
-            /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,
-            /,\s*Teil\s+\d+$/i,
-            /-\s*.*?(?:Reihe|Serie)\s+\d+$/i
+            /^.*?,\s*Folge\s*\d+:\s*/i,           // "Folge" (Episode)
+            /^.*?,\s*Band\s*\d+:\s*/i,            // "Band" (Volume)
+            /^.*?\s+-\s+\d+:\s*/i,                // Title - 1: format
+            /^.*?\s+\d+:\s*/i,                    // Title 1: format
+            /^.*?,\s*Teil\s*\d+:\s*/i,            // "Teil" (Part)
+            /^.*?,\s*Volume\s*\d+:\s*/i,          // "Volume"
+            /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,    // (Unabridged/Abridged)
+            /,\s*Teil\s+\d+$/i,                   // ", Teil X" at end
+            /-\s*.*?(?:Reihe|Serie)\s+\d+$/i      // "- Serie X" at end
         ];
 
-        // Kombiniere beide Arrays:
         const allPatterns = [...patterns, ...germanPatterns];
 
+        // Clean up the title by removing all pattern matches
         allPatterns.forEach(pattern => {
             title = title.replace(pattern, '');
         });
@@ -197,7 +198,7 @@ class StorytelProvider {
             }
         }
 
-        // Check if there is a subtitle now
+        // Check if there is a subtitle (separated by : or -)
         if (title.includes(':') || title.includes('-')) {
             const parts = title.split(/[:\-]/);
             if (parts[1] && parts[1].trim().length >= 3) {
@@ -206,7 +207,7 @@ class StorytelProvider {
             }
         }
 
-        // This should be redundant, but just in case
+        // Final cleanup of title
         allPatterns.forEach(pattern => {
             title = title.replace(pattern, '');
         });
@@ -220,16 +221,12 @@ class StorytelProvider {
             ? this.splitGenre(this.ensureString(book.category.title))
             : [];
 
-        // This is completely redundant, as it does not provide anything, but spam ABS
-        const tags = [...genres];
-
         const metadata = {
             title: this.ensureString(title),
             subtitle: subtitle,
             author: author,
             language: this.ensureString(book.language?.isoValue || this.locale),
             genres: genres.length > 0 ? genres : undefined,
-            tags: undefined, // Redundant, might be removed
             series: seriesInfo,
             cover: this.upgradeCoverUrl(book.largeCover),
             duration: abook ? (abook.length ? Math.floor(abook.length / 60000) : undefined) : undefined,
@@ -240,6 +237,7 @@ class StorytelProvider {
             isbn: this.ensureString(abook ? abook.isbn : ebook?.isbn)
         };
 
+        // Remove undefined values
         Object.keys(metadata).forEach(key =>
             metadata[key] === undefined && delete metadata[key]
         );
@@ -247,6 +245,13 @@ class StorytelProvider {
         return metadata;
     }
 
+    /**
+     * Searches for books in the Storytel API
+     * @param query {string} Search query
+     * @param author {string} Optional author filter
+     * @param locale {string} Locale for the search
+     * @returns {Promise<{matches: *[]}>}
+     */
     async searchBooks(query, author = '', locale) {
         const cleanQuery = query.split(':')[0].trim();
         const formattedQuery = cleanQuery.replace(/\s+/g, '+');
@@ -276,7 +281,6 @@ class StorytelProvider {
             const books = searchResponse.data.books.slice(0, 5);
             console.log(`Found ${books.length} books in search results`);
 
-
             const matches = await Promise.all(books.map(async book => {
                 if (!book.book || !book.book.id) return null;
                 const bookDetails = await this.getBookDetails(book.book.id, locale);
@@ -295,7 +299,13 @@ class StorytelProvider {
             return { matches: [] };
         }
     }
-
+    
+    /**
+    * Gets detailed book information from Storytel API
+    * @param bookId {string|number} The book ID to fetch details for
+    * @param locale {string} Locale for the request
+    * @returns {Promise<*>}
+    */
     async getBookDetails(bookId, locale) {
         try {
             const response = await axios.get(this.baseBookUrl, {
@@ -307,7 +317,7 @@ class StorytelProvider {
                     'User-Agent': 'Storytel ABS-Scraper'
                 }
             });
-
+            
             return response.data;
         } catch (error) {
             console.error(`Error fetching book details for ID ${bookId}:`, error.message);
