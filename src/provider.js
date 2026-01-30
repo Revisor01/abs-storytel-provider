@@ -183,23 +183,33 @@ class StorytelProvider {
         if (seriesInfo) {
             subtitle = `${seriesName} ${book.seriesOrder}`;
 
-            // Removes series from title name
-            if (title.includes(seriesName)) {
+            // Removes series from title name, but only when the title is not
+            // identical to or ending with the series name (e.g. "Två berättelser
+            // om Lotta på Bråkmakargatan" should keep its full title)
+            if (title.includes(seriesName) && title !== seriesName) {
                 const safeSeriesName = this.escapeRegex(seriesName);
-                const regex = new RegExp(`^(.+?)[-,]\\s*${safeSeriesName}`, 'i');
 
-                const beforeSeriesMatch = title.match(regex);
-                if (beforeSeriesMatch) {
-                    title = beforeSeriesMatch[1].trim();
+                // Case 1: Series name at end after separator — "Title - SeriesName" or "Title, SeriesName"
+                const trailingRegex = new RegExp(`^(.+?)[-,]\\s*${safeSeriesName}$`, 'i');
+                const trailingMatch = title.match(trailingRegex);
+                if (trailingMatch) {
+                    title = trailingMatch[1].trim();
                 }
-
-                title = title.replace(seriesName, '');
+                // Case 2: Series name at start — "SeriesName ActualTitle"
+                else if (title.startsWith(seriesName)) {
+                    const remainder = title.slice(seriesName.length).replace(/^[\s,\-:]+/, '').trim();
+                    if (remainder.length > 0) {
+                        title = remainder;
+                    }
+                }
             }
         }
 
-        // Check if there is a subtitle (separated by : or -)
-        if (title.includes(':') || title.includes('-')) {
-            const parts = title.split(/[:\-]/);
+        // Check if there is a subtitle (separated by : or " - ")
+        // Only split on "-" when surrounded by spaces to avoid splitting
+        // hyphenated words like "Harry-Potter-Lexikon"
+        if (title.includes(':') || title.includes(' - ')) {
+            const parts = title.split(/:|(?<=\s)-(?=\s)/);
             if (parts[1] && parts[1].trim().length >= 3) {
                 title = parts[0].trim();
                 subtitle = parts[1].trim();
