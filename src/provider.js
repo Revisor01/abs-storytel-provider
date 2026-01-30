@@ -8,7 +8,6 @@ const cache = new NodeCache({
 class StorytelProvider {
     constructor() {
         this.baseSearchUrl = 'https://www.storytel.com/api/search.action';
-        this.baseBookUrl = 'https://www.storytel.com/api/getBookInfoForContent.action';
         this.locale = 'en';
     }
 
@@ -281,13 +280,12 @@ class StorytelProvider {
             const books = searchResponse.data.books.slice(0, 5);
             console.log(`Found ${books.length} books in search results`);
 
-            const matches = await Promise.all(books.map(async book => {
+            const matches = books.map(book => {
                 if (!book.book || !book.book.id) return null;
-                const bookDetails = await this.getBookDetails(book.book.id, locale);
-                if (!bookDetails) return null;
-
-                return this.formatBookMetadata(bookDetails);
-            }));
+                // Search results already contain all needed data (book, abook, ebook)
+                // Wrap in {slb: ...} to match the format expected by formatBookMetadata
+                return this.formatBookMetadata({ slb: book });
+            });
 
             const validMatches = matches.filter(match => match !== null);
 
@@ -300,30 +298,6 @@ class StorytelProvider {
         }
     }
     
-    /**
-    * Gets detailed book information from Storytel API
-    * @param bookId {string|number} The book ID to fetch details for
-    * @param locale {string} Locale for the request
-    * @returns {Promise<*>}
-    */
-    async getBookDetails(bookId, locale) {
-        try {
-            const response = await axios.get(this.baseBookUrl, {
-                params: {
-                    bookId: bookId,
-                    request_locale: locale
-                },
-                headers: {
-                    'User-Agent': 'Storytel ABS-Scraper'
-                }
-            });
-            
-            return response.data;
-        } catch (error) {
-            console.error(`Error fetching book details for ID ${bookId}:`, error.message);
-            return null;
-        }
-    }
 }
 
 module.exports = StorytelProvider;
