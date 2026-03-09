@@ -1,9 +1,26 @@
 const axios = require('axios');
-const NodeCache = require('node-cache');
+const Database = require('better-sqlite3');
+const path = require('path');
+const fs = require('fs');
 
-const cache = new NodeCache({
-    stdTTL: 600
-});
+// Persistent SQLite cache
+const dbPath = process.env.CACHE_DB || path.join(__dirname, '..', 'data', 'cache.db');
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+}
+const db = new Database(dbPath);
+db.pragma('journal_mode = WAL');
+db.exec(`
+    CREATE TABLE IF NOT EXISTS search_cache (
+        cache_key TEXT PRIMARY KEY,
+        response TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    )
+`);
+
+const getCache = db.prepare('SELECT response FROM search_cache WHERE cache_key = ?');
+const setCache = db.prepare('INSERT OR REPLACE INTO search_cache (cache_key, response, created_at) VALUES (?, ?, ?)');
 
 class StorytelProvider {
     constructor() {
@@ -373,9 +390,11 @@ class StorytelProvider {
 
         const cacheKey = `${formattedQuery}-${locale}-${type}`;
 
-        const cachedResult = cache.get(cacheKey);
-        if (cachedResult) {
-            return cachedResult;
+        // Check persistent cache
+        const cached = getCache.get(cacheKey);
+        if (cached) {
+            console.log(`[cache] HIT for "${cacheKey}"`);
+            return JSON.parse(cached.response);
         }
 
         try {
@@ -430,7 +449,11 @@ class StorytelProvider {
             }
 
             const result = { matches };
-            cache.set(cacheKey, result);
+
+            // Persist to SQLite cache
+            setCache.run(cacheKey, JSON.stringify(result), Date.now());
+            console.log(`[cache] WRITE for "${cacheKey}"`);
+
             return result;
         } catch (error) {
             console.error('Error searching books:', error.message);
