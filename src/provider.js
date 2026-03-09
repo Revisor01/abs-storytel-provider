@@ -19,6 +19,9 @@ db.exec(`
     )
 `);
 
+// Clean up empty cache entries from previous versions
+db.exec(`DELETE FROM search_cache WHERE response = '{"matches":[]}'`);
+
 const getCache = db.prepare('SELECT response FROM search_cache WHERE cache_key = ?');
 const setCache = db.prepare('INSERT OR REPLACE INTO search_cache (cache_key, response, created_at) VALUES (?, ?, ?)');
 
@@ -436,9 +439,11 @@ class StorytelProvider {
 
             const result = { matches };
 
-            // Persist to SQLite cache
-            setCache.run(cacheKey, JSON.stringify(result), Date.now());
-            console.log(`[cache] WRITE for "${cacheKey}"`);
+            // Only cache non-empty results
+            if (matches.length > 0) {
+                setCache.run(cacheKey, JSON.stringify(result), Date.now());
+                console.log(`[cache] WRITE for "${cacheKey}"`);
+            }
 
             return result;
         } catch (error) {
