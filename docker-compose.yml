@@ -6,6 +6,8 @@ services:
     container_name: storytel-provider
     ports:
       - "3000:3000"
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
     networks:
       - abs_network
