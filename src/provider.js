@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { execSync } = require('child_process');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
@@ -398,37 +398,23 @@ class StorytelProvider {
         }
 
         try {
-            const fetchResults = async (retries = 1) => {
-                try {
-                    return await axios.get(this.baseSearchUrl, {
-                        params: {
-                            request_locale: locale,
-                            q: formattedQuery
-                        },
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                            'Accept': 'application/json',
-                            'Accept-Language': 'en-US,en;q=0.9',
-                            'Cache-Control': 'no-cache'
-                        }
-                    });
-                } catch (err) {
-                    if (err.response && err.response.status === 403 && retries > 0) {
-                        console.log('Got 403 from Storytel, retrying after 2s...');
-                        await new Promise(r => setTimeout(r, 2000));
-                        return fetchResults(retries - 1);
-                    }
-                    throw err;
-                }
-            };
+            const url = `${this.baseSearchUrl}?request_locale=${encodeURIComponent(locale)}&q=${encodeURIComponent(formattedQuery)}`;
+            const curlCmd = `curl -s -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" -H "Accept: application/json" -H "Accept-Language: en-US,en;q=0.9" "${url}"`;
 
-            const searchResponse = await fetchResults();
+            let responseBody;
+            try {
+                responseBody = execSync(curlCmd, { timeout: 15000, encoding: 'utf8' });
+            } catch (curlErr) {
+                throw new Error(`curl failed: ${curlErr.message}`);
+            }
 
-            if (!searchResponse.data || !searchResponse.data.books) {
+            const searchData = JSON.parse(responseBody);
+
+            if (!searchData || !searchData.books) {
                 return { matches: [] };
             }
 
-            const books = searchResponse.data.books;
+            const books = searchData.books;
             console.log(`Found ${books.length} books in search results`);
 
             const matches = [];
