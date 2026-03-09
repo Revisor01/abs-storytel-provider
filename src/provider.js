@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const axios = require('axios');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
@@ -402,16 +402,17 @@ class StorytelProvider {
 
         try {
             const url = `${this.baseSearchUrl}?request_locale=${encodeURIComponent(locale)}&q=${encodeURIComponent(formattedQuery)}`;
-            const curlCmd = `curl -4 -s --compressed -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" -H "Accept: application/json" -H "Accept-Encoding: gzip, deflate" -H "Accept-Language: en-US,en;q=0.9" "${url}"`;
 
-            let responseBody;
-            try {
-                responseBody = execSync(curlCmd, { timeout: 30000, encoding: 'utf8' });
-            } catch (curlErr) {
-                throw new Error(`curl failed: ${curlErr.message}`);
-            }
+            const response = await axios.get(url, {
+                timeout: 30000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                    'Accept': 'application/json',
+                    'Accept-Language': 'en-US,en;q=0.9'
+                }
+            });
 
-            const searchData = JSON.parse(responseBody);
+            const searchData = response.data;
 
             if (!searchData || !searchData.books) {
                 return { matches: [] };
