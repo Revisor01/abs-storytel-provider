@@ -26,17 +26,24 @@ const validateRegion = (req, res, next) => {
     next();
 };
 
+// Log incoming requests for debugging
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} query=${JSON.stringify(req.query)}`);
+    next();
+});
+
 // Original search endpoint
 app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
-    const { query = '', author = '', limit } = req.query;
+    const { query = '', title = '', author = '', limit } = req.query;
+    const searchQuery = query || title;
     const region = req.params.region;
 
-    if (!query) {
+    if (!searchQuery) {
         return res.status(400).json({ error: 'Query parameter is required' });
     }
 
     try {
-        const results = await provider.searchBooks(query, author, region, 'all', limit ? parseInt(limit) : 5);
+        const results = await provider.searchBooks(searchQuery, author, region, 'all', limit ? parseInt(limit) : 5);
         res.json(results);
     } catch (error) {
         console.error('Search error:', error);
@@ -46,15 +53,16 @@ app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
 
 // E-Book search endpoint
 app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
-    const { query = '', author = '', limit } = req.query;
+    const { query = '', title = '', author = '', limit } = req.query;
+    const searchQuery = query || title;
     const region = req.params.region;
 
-    if (!query) {
+    if (!searchQuery) {
         return res.status(400).json({ error: 'Query parameter is required' });
     }
 
     try {
-        const results = await provider.searchBooks(query, author, region, 'ebook', limit ? parseInt(limit) : 5);
+        const results = await provider.searchBooks(searchQuery, author, region, 'ebook', limit ? parseInt(limit) : 5);
         res.json(results);
     } catch (error) {
         console.error('Book search error:', error);
@@ -64,15 +72,16 @@ app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
 
 // Audiobook search endpoint
 app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res) => {
-    const { query = '', author = '', limit } = req.query;
+    const { query = '', title = '', author = '', limit } = req.query;
+    const searchQuery = query || title;
     const region = req.params.region;
 
-    if (!query) {
+    if (!searchQuery) {
         return res.status(400).json({ error: 'Query parameter is required' });
     }
 
     try {
-        const results = await provider.searchBooks(query, author, region, 'audiobook', limit ? parseInt(limit) : 5);
+        const results = await provider.searchBooks(searchQuery, author, region, 'audiobook', limit ? parseInt(limit) : 5);
 
         const audiobooks = results.matches;
         const stats = {
