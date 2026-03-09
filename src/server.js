@@ -32,6 +32,9 @@ app.use((req, res, next) => {
     next();
 });
 
+// ABS sends mediaType=book for all book types — always search all
+// The /audiobook/ and /book/ endpoints handle specific filtering
+
 // Original search endpoint
 app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
     const { query = '', title = '', author = '', limit } = req.query;
