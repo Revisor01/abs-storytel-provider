@@ -62,6 +62,45 @@ class StorytelProvider {
     }
 
     /**
+     * Strips HTML tags and decodes common HTML entities from a string
+     * @param str {string}
+     * @returns {string}
+     */
+    stripHtml(str) {
+        if (!str) return '';
+        return str
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#039;/g, "'")
+            .replace(/&nbsp;/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    /**
+     * Calculates a simple author match score (0-1)
+     * @param resultAuthor {string}
+     * @param searchAuthor {string}
+     * @returns {number}
+     */
+    authorMatchScore(resultAuthor, searchAuthor) {
+        if (!searchAuthor || !resultAuthor) return 0;
+        const normalize = s => s.toLowerCase().replace(/[^a-zäöüàáâãèéêëìíîïòóôõùúûüñç\s]/g, '').trim();
+        const result = normalize(resultAuthor);
+        const search = normalize(searchAuthor);
+        if (result === search) return 1;
+        if (result.includes(search) || search.includes(result)) return 0.8;
+        const searchParts = search.split(/\s+/);
+        const matchedParts = searchParts.filter(part => result.includes(part));
+        return matchedParts.length / searchParts.length * 0.6;
+    }
+
+    /**
      * Formats the book metadata to the ABS format
      * @param bookData
      * @param type {string} Type filter: 'audiobook', 'ebook', or 'all'
@@ -94,10 +133,10 @@ class StorytelProvider {
         let seriesName = null;
         if (book.series && book.series.length > 0) {
             seriesName = book.series[0].name;
-            seriesInfo = [{
-                series: this.ensureString(seriesName),
+            seriesInfo = book.series.map(s => ({
+                series: this.ensureString(s.name),
                 sequence: book.seriesOrder ? this.ensureString(book.seriesOrder) : undefined
-            }];
+            }));
         }
 
         const author = this.ensureString(book.authorsAsString);
@@ -187,7 +226,26 @@ class StorytelProvider {
             /-\s*.*?(?:Reihe|Serie)\s+\d+$/i      // "- Serie X" at end
         ];
 
-        const allPatterns = [...patterns, ...germanPatterns];
+        // Unabridged/Abridged markers across all supported languages
+        const abridgedPatterns = [
+            /\s*\((Unabridged|Abridged)\)\s*$/i,           // English
+            /\s*\((Oavkortad|Förkortad)\)\s*$/i,           // Swedish
+            /\s*\((Uforkortet|Forkortet)\)\s*$/i,          // Danish/Norwegian
+            /\s*\((Lyhentämätön|Lyhennetty)\)\s*$/i,       // Finnish
+            /\s*\((Óstytt|Stytt)\)\s*$/i,                  // Icelandic
+            /\s*\((Sin abreviar|Abreviado)\)\s*$/i,        // Spanish
+            /\s*\((Intégral|Abrégé)\)\s*$/i,               // French
+            /\s*\((Integrale|Ridotto)\)\s*$/i,             // Italian
+            /\s*\((Vollständig|Gekürzte Fassung)\)\s*$/i,  // German alternative
+            /\s*\((Pełna|Skrócona)\)\s*$/i,                // Polish
+            /\s*\((Integral|Resumido)\)\s*$/i,             // Portuguese
+            /\s*\((Несъкратено|Съкратено)\)\s*$/i,         // Bulgarian
+            /\s*\((Kısaltılmamış|Kısaltılmış)\)\s*$/i,     // Turkish
+            /\s*\((Полная версия|Сокращённая)\)\s*$/i,     // Russian
+            /\s*\((كامل|مختصر)\)\s*$/i,                    // Arabic
+        ];
+
+        const allPatterns = [...patterns, ...germanPatterns, ...abridgedPatterns];
 
         // Clean up the title by removing all pattern matches
         allPatterns.forEach(pattern => {
@@ -267,6 +325,12 @@ class StorytelProvider {
                 : abook.narratorAsString || undefined)
             : undefined;
 
+        const rawDescription = abook ? abook.description : ebook?.description;
+
+        const releaseDate = abook?.releaseDateFormat || ebook?.releaseDateFormat
+            || abook?.releaseDate || ebook?.releaseDate || book.releaseDate;
+        const publishedYear = releaseDate ? releaseDate.substring(0, 4) : undefined;
+
         const metadata = {
             title: this.ensureString(title),
             subtitle: subtitle,
@@ -278,9 +342,9 @@ class StorytelProvider {
             cover: this.upgradeCoverUrl(cover),
             duration: abook ? (abook.length ? Math.floor(abook.length / 60000) : undefined) : undefined,
             narrator: narrator,
-            description: this.ensureString(abook ? abook.description : ebook?.description),
+            description: this.stripHtml(this.ensureString(rawDescription)),
             publisher: this.ensureString(abook ? abook.publisher?.name : ebook?.publisher?.name),
-            publishedYear: (abook ? abook.releaseDateFormat : ebook?.releaseDateFormat)?.substring(0, 4),
+            publishedYear: publishedYear,
             isbn: this.ensureString(abook ? abook.isbn : ebook?.isbn)
         };
 
@@ -339,6 +403,13 @@ class StorytelProvider {
                 if (metadata) {
                     matches.push(metadata);
                 }
+            }
+
+            // Sort by author relevance if author was provided
+            if (author) {
+                matches.sort((a, b) =>
+                    this.authorMatchScore(b.author, author) - this.authorMatchScore(a.author, author)
+                );
             }
 
             const result = { matches };
