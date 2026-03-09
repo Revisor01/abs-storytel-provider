@@ -385,6 +385,21 @@ class StorytelProvider {
      * @param limit {number} Max results (1-10, default 5)
      * @returns {Promise<{matches: *[]}>}
      */
+    async fetchFromApi(formattedQuery, locale) {
+        const url = `${this.baseSearchUrl}?request_locale=${encodeURIComponent(locale)}&q=${encodeURIComponent(formattedQuery)}`;
+
+        const response = await axios.get(url, {
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                'Accept-Language': 'en-US,en;q=0.9'
+            }
+        });
+
+        return response.data;
+    }
+
     async searchBooks(query, author = '', locale, type = 'all', limit = 5) {
         const cleanQuery = query.split(':')[0].trim();
         const searchQuery = author ? `${cleanQuery} ${author}` : cleanQuery;
@@ -401,25 +416,18 @@ class StorytelProvider {
         }
 
         try {
-            const url = `${this.baseSearchUrl}?request_locale=${encodeURIComponent(locale)}&q=${encodeURIComponent(formattedQuery)}`;
-
-            const response = await axios.get(url, {
-                timeout: 30000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                    'Accept': 'application/json',
-                    'Accept-Language': 'en-US,en;q=0.9'
-                }
-            });
-
-            const searchData = response.data;
-
-            if (!searchData || !searchData.books) {
-                return { matches: [] };
-            }
-
-            const books = searchData.books;
+            let searchData = await this.fetchFromApi(formattedQuery, locale);
+            let books = searchData?.books || [];
             console.log(`Found ${books.length} books in search results`);
+
+            // Retry without author if combined search found nothing
+            if (books.length === 0 && author) {
+                const queryOnly = cleanQuery.replace(/\s+/g, '+');
+                console.log(`Retrying without author: "${queryOnly}"`);
+                searchData = await this.fetchFromApi(queryOnly, locale);
+                books = searchData?.books || [];
+                console.log(`Retry found ${books.length} books`);
+            }
 
             const matches = [];
             for (const book of books) {
