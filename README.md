@@ -2,11 +2,18 @@
 A metadata provider that fetches book information from Storytel's API.
 
 ## Features
-- High-resolution cover images (640x640)
-- Smart title and series handling
-- Multi-region support
-- Separate audiobook and book endpoints
-- Audiobook-specific metadata and statistics
+- High-resolution cover images (1200x1200)
+- Smart title and series handling with subtitle extraction
+- Multi-region support (20+ languages)
+- Separate audiobook and e-book endpoints with proper type filtering
+- Audiobook-specific metadata (narrator, duration, publisher, ISBN)
+- Author relevance ranking when author is provided
+- Multi-series support
+- Tags extraction
+- HTML cleanup in descriptions
+- Abridged/Unabridged marker removal in 15 languages
+- Persistent SQLite cache to minimize API calls
+- Configurable result limit (1–10)
 
 ## Installation
 
@@ -19,18 +26,20 @@ A metadata provider that fetches book information from Storytel's API.
       abs-storytel-provider:
         image: ghcr.io/revisor01/abs-storytel-provider:latest
         container_name: abs-storytel-provider
+        volumes:
+          - ./data:/app/data
         restart: unless-stopped
         networks:
           - abs_network
-        security_opt:
-          - no-new-privileges:true
 
     networks:
       abs_network:
         external: true
     ```
 
-    > **Important:** The `abs_network` is a Docker network that allows this container to communicate with your Audiobookshelf container by name. Both containers must be on the same network.
+    > **Important:** The volume mount `./data:/app/data` is required for the persistent search cache. Without it, the cache is lost on container restart.
+    >
+    > The `abs_network` is a Docker network that allows this container to communicate with your Audiobookshelf container by name. Both containers must be on the same network.
     >
     > If you don't have this network yet, create it first:
     > ```bash
@@ -48,6 +57,8 @@ A metadata provider that fetches book information from Storytel's API.
       abs-storytel-provider:
         image: ghcr.io/revisor01/abs-storytel-provider:latest
         container_name: abs-storytel-provider
+        volumes:
+          - ./data:/app/data
         restart: unless-stopped
         networks:
           - my_network
@@ -65,6 +76,8 @@ A metadata provider that fetches book information from Storytel's API.
       abs-storytel-provider:
         image: ghcr.io/revisor01/abs-storytel-provider:latest
         container_name: abs-storytel-provider
+        volumes:
+          - ./data:/app/data
         restart: unless-stopped
         ports:
           - "3000:3000"
@@ -93,8 +106,12 @@ A metadata provider that fetches book information from Storytel's API.
 ## Endpoints
 
 - `/<region>/search?query=...` — Returns all available media (books and audiobooks)
-- `/<region>/book/search?query=...` — Returns only e-books (no audiobooks)
+- `/<region>/book/search?query=...` — Returns only e-books
 - `/<region>/audiobook/search?query=...` — Returns only audiobooks (with narrator, duration, and stats)
+
+Optional parameters:
+- `&author=...` — Improves search relevance and ranks results by author match
+- `&limit=N` — Maximum number of results (1–10, default: 5)
 
 ## Region Support
 
@@ -130,25 +147,34 @@ If you configure the provider in Audiobookshelf with authentication, enter the s
 ## Metadata Processing
 
 ### Title Handling
-- Removes format indicators (e.g. "Ungekürzt", "Gekürzt")
+- Removes abridged/unabridged markers in 15 languages
 - Cleans series/episode/volume markers from titles across 20+ languages
-- Extracts subtitles
+- Extracts subtitles (splits on `:` or ` - `)
+- Swaps numeric-only titles with subtitle
 
 ### Series Information
-- Automatically extracts series name and number
-- Formats as "Series Name, Number"
+- Extracts all series a book belongs to (multi-series support)
+- Returns series even without a sequence number
+- Removes series name from title to avoid duplication
 
-### Audiobook-Specific Metadata
-- Duration in minutes
-- Narrator information
-- Publisher details
-- Release year
-- ISBN
+### Cover Images
+- Upgraded to 1200x1200 resolution
+- Uses e-book-specific covers when searching for e-books
+
+### Description
+- HTML tags stripped and entities decoded
+- Clean plaintext output
+
+## Caching
+
+Search results are stored in a **persistent SQLite database** (`data/cache.db`). Each unique search query is only sent to Storytel once — all subsequent requests are served from the local cache. This prevents rate-limiting (403 errors) and speeds up repeated searches.
+
+The cache has no expiration. To clear it, delete `data/cache.db` and restart the container.
 
 ## Known Limitations
 - Search results depend on Storytel API availability
 - Some metadata fields might be unavailable depending on the book
-- Maximum of 5 results per search
+- Series information comes from Storytel and may not always match the actual series name
 
 ## License
 
