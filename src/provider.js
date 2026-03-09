@@ -36,7 +36,7 @@ class StorytelProvider {
      */
     upgradeCoverUrl(url) {
         if (!url) return undefined;
-        return `https://storytel.com${url.replace('320x320', '640x640')}`;
+        return `https://storytel.com${url.replace(/\d{3}x\d{3}/, '1200x1200')}`;
     }
 
     /**
@@ -64,25 +64,39 @@ class StorytelProvider {
     /**
      * Formats the book metadata to the ABS format
      * @param bookData
-     * @returns {{title: (string|string), subtitle: *, author: (string|string), language: (string|string), genres: (*[]|undefined), tags: undefined, series: null, cover: string, duration: (number|undefined), narrator: (*|undefined), description: (string|string), publisher: (string|string), publishedYear: string | undefined, isbn: (string|string)}|null}
+     * @param type {string} Type filter: 'audiobook', 'ebook', or 'all'
+     * @returns {object|null}
      */
-    formatBookMetadata(bookData) {
+    formatBookMetadata(bookData, type = 'all') {
         const slb = bookData.slb;
         if (!slb || !slb.book) return null;
 
         const book = slb.book;
-        const abook = slb.abook;
-        const ebook = slb.ebook;
+        let abook = slb.abook;
+        let ebook = slb.ebook;
 
-        if (!abook && !ebook) return null;
+        // Filter by type
+        switch (type) {
+            case 'audiobook':
+                ebook = undefined;
+                if (!abook) return null;
+                break;
+            case 'ebook':
+                abook = undefined;
+                if (!ebook) return null;
+                break;
+            default:
+                if (!abook && !ebook) return null;
+                break;
+        }
 
         let seriesInfo = null;
         let seriesName = null;
-        if (book.series && book.series.length > 0 && book.seriesOrder) {
+        if (book.series && book.series.length > 0) {
             seriesName = book.series[0].name;
             seriesInfo = [{
                 series: this.ensureString(seriesName),
-                sequence: this.ensureString(book.seriesOrder)
+                sequence: book.seriesOrder ? this.ensureString(book.seriesOrder) : undefined
             }];
         }
 
@@ -181,7 +195,9 @@ class StorytelProvider {
         });
 
         if (seriesInfo) {
-            subtitle = `${seriesName} ${book.seriesOrder}`;
+            if (book.seriesOrder) {
+                subtitle = `${seriesName} ${book.seriesOrder}`;
+            }
 
             // Removes series from title name, but only when the title is not
             // identical to or ending with the series name (e.g. "Två berättelser
@@ -216,6 +232,12 @@ class StorytelProvider {
             }
         }
 
+        // If title is only a number, swap with subtitle
+        if (/^\d+$/.test(title.trim()) && subtitle) {
+            title = subtitle;
+            subtitle = undefined;
+        }
+
         // Final cleanup of title
         allPatterns.forEach(pattern => {
             title = title.replace(pattern, '');
@@ -230,16 +252,32 @@ class StorytelProvider {
             ? this.splitGenre(this.ensureString(book.category.title))
             : [];
 
+        const tags = book.tags && book.tags.length > 0
+            ? book.tags.map(t => t.name)
+            : undefined;
+
+        // Use ebook-specific covers when searching for ebooks
+        const cover = type === 'ebook'
+            ? (book.largeCoverE || book.coverE || book.largeCover || book.cover)
+            : (book.largeCover || book.cover || book.largeCoverE || book.coverE);
+
+        const narrator = abook
+            ? (abook.narrators && abook.narrators.length > 0
+                ? abook.narrators.map(n => n.name).join(', ')
+                : abook.narratorAsString || undefined)
+            : undefined;
+
         const metadata = {
             title: this.ensureString(title),
             subtitle: subtitle,
             author: author,
             language: this.ensureString(book.language?.isoValue || this.locale),
             genres: genres.length > 0 ? genres : undefined,
+            tags: tags,
             series: seriesInfo,
-            cover: this.upgradeCoverUrl(book.largeCover),
+            cover: this.upgradeCoverUrl(cover),
             duration: abook ? (abook.length ? Math.floor(abook.length / 60000) : undefined) : undefined,
-            narrator: abook ? abook.narratorAsString || undefined : undefined,
+            narrator: narrator,
             description: this.ensureString(abook ? abook.description : ebook?.description),
             publisher: this.ensureString(abook ? abook.publisher?.name : ebook?.publisher?.name),
             publishedYear: (abook ? abook.releaseDateFormat : ebook?.releaseDateFormat)?.substring(0, 4),
@@ -259,13 +297,16 @@ class StorytelProvider {
      * @param query {string} Search query
      * @param author {string} Optional author filter
      * @param locale {string} Locale for the search
+     * @param type {string} Type filter: 'audiobook', 'ebook', or 'all'
+     * @param limit {number} Max results (1-10, default 5)
      * @returns {Promise<{matches: *[]}>}
      */
-    async searchBooks(query, author = '', locale) {
+    async searchBooks(query, author = '', locale, type = 'all', limit = 5) {
         const cleanQuery = query.split(':')[0].trim();
         const formattedQuery = cleanQuery.replace(/\s+/g, '+');
+        const maxResults = Math.min(Math.max(limit, 1), 10);
 
-        const cacheKey = `${formattedQuery}-${author}-${locale}`;
+        const cacheKey = `${formattedQuery}-${author}-${locale}-${type}`;
 
         const cachedResult = cache.get(cacheKey);
         if (cachedResult) {
@@ -287,19 +328,20 @@ class StorytelProvider {
                 return { matches: [] };
             }
 
-            const books = searchResponse.data.books.slice(0, 5);
+            const books = searchResponse.data.books;
             console.log(`Found ${books.length} books in search results`);
 
-            const matches = books.map(book => {
-                if (!book.book || !book.book.id) return null;
-                // Search results already contain all needed data (book, abook, ebook)
-                // Wrap in {slb: ...} to match the format expected by formatBookMetadata
-                return this.formatBookMetadata({ slb: book });
-            });
+            const matches = [];
+            for (const book of books) {
+                if (matches.length >= maxResults) break;
+                if (!book.book || !book.book.id) continue;
+                const metadata = this.formatBookMetadata({ slb: book }, type);
+                if (metadata) {
+                    matches.push(metadata);
+                }
+            }
 
-            const validMatches = matches.filter(match => match !== null);
-
-            const result = { matches: validMatches };
+            const result = { matches };
             cache.set(cacheKey, result);
             return result;
         } catch (error) {
@@ -307,7 +349,7 @@ class StorytelProvider {
             return { matches: [] };
         }
     }
-    
+
 }
 
 module.exports = StorytelProvider;

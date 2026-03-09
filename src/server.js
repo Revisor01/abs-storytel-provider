@@ -28,7 +28,7 @@ const validateRegion = (req, res, next) => {
 
 // Original search endpoint
 app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
-    const { query = '', author = '' } = req.query;
+    const { query = '', author = '', limit } = req.query;
     const region = req.params.region;
 
     if (!query) {
@@ -36,7 +36,7 @@ app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
     }
 
     try {
-        const results = await provider.searchBooks(query, author, region);
+        const results = await provider.searchBooks(query, author, region, 'all', limit ? parseInt(limit) : 5);
         res.json(results);
     } catch (error) {
         console.error('Search error:', error);
@@ -46,7 +46,7 @@ app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
 
 // E-Book search endpoint
 app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
-    const { query = '', author = '' } = req.query;
+    const { query = '', author = '', limit } = req.query;
     const region = req.params.region;
 
     if (!query) {
@@ -54,14 +54,8 @@ app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
     }
 
     try {
-        const results = await provider.searchBooks(query, author, region);
-        const ebooks = results.matches.filter(book => 
-            book && !book.duration // Filter für E-Books (keine duration = E-Book)
-        );
-
-        res.json({
-            matches: ebooks
-        });
+        const results = await provider.searchBooks(query, author, region, 'ebook', limit ? parseInt(limit) : 5);
+        res.json(results);
     } catch (error) {
         console.error('Book search error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -70,7 +64,7 @@ app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
 
 // Audiobook search endpoint
 app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res) => {
-    const { query = '', author = '' } = req.query;
+    const { query = '', author = '', limit } = req.query;
     const region = req.params.region;
 
     if (!query) {
@@ -78,15 +72,13 @@ app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res)
     }
 
     try {
-        const results = await provider.searchBooks(query, author, region);
-        const audiobooks = results.matches.filter(book => 
-            book && book.duration !== undefined
-        );
+        const results = await provider.searchBooks(query, author, region, 'audiobook', limit ? parseInt(limit) : 5);
 
+        const audiobooks = results.matches;
         const stats = {
             total: audiobooks.length,
             withNarrator: audiobooks.filter(b => b.narrator).length,
-            averageDuration: audiobooks.length > 0 
+            averageDuration: audiobooks.length > 0
                 ? Math.round(audiobooks.reduce((acc, b) => acc + (b.duration || 0), 0) / audiobooks.length)
                 : 0
         };
