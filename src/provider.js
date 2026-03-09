@@ -399,11 +399,11 @@ class StorytelProvider {
 
         try {
             const url = `${this.baseSearchUrl}?request_locale=${encodeURIComponent(locale)}&q=${encodeURIComponent(formattedQuery)}`;
-            const curlCmd = `curl -s -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" -H "Accept: application/json" -H "Accept-Language: en-US,en;q=0.9" "${url}"`;
+            const curlCmd = `curl -4 -s --connect-timeout 5 --max-time 8 --compressed -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" -H "Accept: application/json" -H "Accept-Encoding: gzip, deflate" -H "Accept-Language: en-US,en;q=0.9" "${url}"`;
 
             let responseBody;
             try {
-                responseBody = execSync(curlCmd, { timeout: 15000, encoding: 'utf8' });
+                responseBody = execSync(curlCmd, { timeout: 9000, encoding: 'utf8' });
             } catch (curlErr) {
                 throw new Error(`curl failed: ${curlErr.message}`);
             }
