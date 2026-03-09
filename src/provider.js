@@ -379,15 +379,31 @@ class StorytelProvider {
         }
 
         try {
-            const searchResponse = await axios.get(this.baseSearchUrl, {
-                params: {
-                    request_locale: locale,
-                    q: formattedQuery
-                },
-                headers: {
-                    'User-Agent': 'Storytel ABS-Scraper'
+            const fetchResults = async (retries = 1) => {
+                try {
+                    return await axios.get(this.baseSearchUrl, {
+                        params: {
+                            request_locale: locale,
+                            q: formattedQuery
+                        },
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                            'Accept': 'application/json',
+                            'Accept-Language': 'en-US,en;q=0.9',
+                            'Cache-Control': 'no-cache'
+                        }
+                    });
+                } catch (err) {
+                    if (err.response && err.response.status === 403 && retries > 0) {
+                        console.log('Got 403 from Storytel, retrying after 2s...');
+                        await new Promise(r => setTimeout(r, 2000));
+                        return fetchResults(retries - 1);
+                    }
+                    throw err;
                 }
-            });
+            };
+
+            const searchResponse = await fetchResults();
 
             if (!searchResponse.data || !searchResponse.data.books) {
                 return { matches: [] };
