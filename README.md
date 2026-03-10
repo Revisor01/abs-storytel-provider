@@ -8,6 +8,7 @@ A metadata provider that fetches book information from Storytel's API.
 - Separate audiobook and e-book endpoints with proper type filtering
 - Audiobook-specific metadata (narrator, duration, publisher, ISBN)
 - Author relevance ranking when author is provided
+- Automatic retry without author when combined search finds no results
 - Multi-series support
 - Tags extraction
 - HTML cleanup in descriptions
@@ -117,13 +118,20 @@ Optional parameters:
 
 Use any Storytel region code in the URL path:
 
-| Region | Code | Example URL |
-|--------|------|-------------|
-| German | `de` | `http://abs-storytel-provider:3000/de` |
-| Swedish | `se` | `http://abs-storytel-provider:3000/se` |
-| English | `en` | `http://abs-storytel-provider:3000/en` |
-| Polish | `pl` | `http://abs-storytel-provider:3000/pl` |
-| ... | ... | Any valid Storytel region code works |
+| Region | Code | Region | Code |
+|--------|------|--------|------|
+| Arabic (Egypt, Saudi Arabia, UAE) | `ae` | Icelandic | `is` |
+| Bulgarian | `bg` | Indonesian | `id` |
+| Brazilian Portuguese | `br` | Italian | `it` |
+| Danish | `dk` | Norwegian | `no` |
+| Dutch (Belgium, Netherlands) | `nl` | Polish | `pl` |
+| English | `en` | Russian | `ru` |
+| Finnish | `fi` | Spanish (Colombia, Spain) | `es` |
+| French | `fr` | Swedish | `se` |
+| German | `de` | Turkish | `tr` |
+| Hebrew (Israel) | `il` | Hindi (India) | `in` |
+
+Any valid Storytel region code works — the ones above have optimized title processing.
 
 ## Authentication (optional)
 
@@ -169,7 +177,9 @@ If you configure the provider in Audiobookshelf with authentication, enter the s
 
 Search results are stored in a **persistent SQLite database** (`data/cache.db`). Each unique search query is only sent to Storytel once — all subsequent requests are served from the local cache. This prevents rate-limiting (403 errors) and speeds up repeated searches.
 
-The cache has no expiration. To clear it, delete `data/cache.db` and restart the container.
+- Empty results (e.g. from timeouts or API errors) are **never cached**
+- Stale empty cache entries from older versions are automatically purged on startup
+- The cache has no expiration. To clear it, delete `data/cache.db` and restart the container.
 
 ## Known Limitations
 - Search results depend on Storytel API availability
