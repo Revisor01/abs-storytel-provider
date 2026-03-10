@@ -304,14 +304,14 @@ class StorytelProvider {
         // hyphenated words like "Harry-Potter-Lexikon"
         if (title.includes(':') || title.includes(' - ')) {
             const parts = title.split(/:|(?<=\s)-(?=\s)/);
-            if (parts[1] && parts[1].trim().length >= 3) {
+            if (parts.length > 1 && parts[1].trim().length >= 3) {
                 title = parts[0].trim();
-                subtitle = parts[1].trim();
+                subtitle = parts.slice(1).map(p => p.trim()).join(' - ');
             }
         }
 
-        // If title is only a number, swap with subtitle
-        if (/^\d+$/.test(title.trim()) && subtitle) {
+        // If title is only a number (incl. decimal like 22.1) or a generic episode/part/volume label, swap with subtitle
+        if (/^(\d+[\d.]*|Episode\s*\d+|Folge\s*\d+|Band\s*\d+|Teil\s*\d+|Volume\s*\d+|Aflevering\s*\d+|Deel\s*\d+|Episódio\s*\d+|Parte\s*\d+|Episodio\s*\d+|Volumen\s*\d+|Afsnit\s*\d+|Bind\s*\d+|Del\s*\d+|Jakso\s*\d+|Volyymi\s*\d+|Osa\s*\d+|Épisode\s*\d+|Tome\s*\d+|Partie\s*\d+|Bagian\s*\d+|Avsnitt\s*\d+|Odcinek\s*\d+|Tom\s*\d+|Część\s*\d+|Þáttur\s*\d+|Bindi\s*\d+|Hluti\s*\d+|епизод\s*\d+|том\s*\d+|част\s*\d+|حلقة\s*\d+|مجلد\s*\d+|جزء\s*\d+|פרק\s*\d+|כרך\s*\d+|חלק\s*\d+|कड़ी\s*\d+|खण्ड\s*\d+|भाग\s*\d+)$/i.test(title.trim()) && subtitle) {
             title = subtitle;
             subtitle = undefined;
         }
