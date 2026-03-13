@@ -110,7 +110,7 @@ class StorytelProvider {
      */
     authorMatchScore(resultAuthor, searchAuthor) {
         if (!searchAuthor || !resultAuthor) return 0;
-        const normalize = s => s.toLowerCase().replace(/[^a-zäöüàáâãèéêëìíîïòóôõùúûüñç\s]/g, '').trim();
+        const normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s]/g, '').trim();
         const result = normalize(resultAuthor);
         const search = normalize(searchAuthor);
         if (result === search) return 1;
@@ -304,7 +304,7 @@ class StorytelProvider {
         // hyphenated words like "Harry-Potter-Lexikon"
         if (title.includes(':') || title.includes(' - ')) {
             const parts = title.split(/:|(?<=\s)-(?=\s)/);
-            if (parts.length > 1 && parts[1].trim().length >= 3) {
+            if (parts.length > 1 && parts[0].trim().length >= 3 && parts[1].trim().length >= 3) {
                 title = parts[0].trim();
                 subtitle = parts.slice(1).map(p => p.trim()).join(' - ');
             }
@@ -429,9 +429,8 @@ class StorytelProvider {
                 console.log(`Retry found ${books.length} books`);
             }
 
-            const matches = [];
+            let matches = [];
             for (const book of books) {
-                if (matches.length >= maxResults) break;
                 if (!book.book || !book.book.id) continue;
                 const metadata = this.formatBookMetadata({ slb: book }, type);
                 if (metadata) {
@@ -439,12 +438,13 @@ class StorytelProvider {
                 }
             }
 
-            // Sort by author relevance if author was provided
+            // Sort by author relevance if author was provided, then limit
             if (author) {
                 matches.sort((a, b) =>
                     this.authorMatchScore(b.author, author) - this.authorMatchScore(a.author, author)
                 );
             }
+            matches = matches.slice(0, maxResults);
 
             const result = { matches };
 
