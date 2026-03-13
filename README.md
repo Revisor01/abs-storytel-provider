@@ -14,7 +14,7 @@ A metadata provider that fetches book information from Storytel's API.
 - HTML cleanup in descriptions
 - Abridged/Unabridged marker removal in 15 languages
 - Persistent SQLite cache to minimize API calls
-- Configurable result limit (1–10)
+- Configurable result limit (1–50, default: 20)
 
 ## Installation
 
@@ -112,7 +112,7 @@ A metadata provider that fetches book information from Storytel's API.
 
 Optional parameters:
 - `&author=...` — Improves search relevance and ranks results by author match
-- `&limit=N` — Maximum number of results (1–10, default: 5)
+- `&limit=N` — Maximum number of results (1–50, default: 20)
 
 ## Region Support
 
