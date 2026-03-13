@@ -400,11 +400,11 @@ class StorytelProvider {
         return response.data;
     }
 
-    async searchBooks(query, author = '', locale, type = 'all', limit = 5) {
+    async searchBooks(query, author = '', locale, type = 'all', limit = 20) {
         const cleanQuery = query.split(':')[0].trim();
         const searchQuery = author ? `${cleanQuery} ${author}` : cleanQuery;
         const formattedQuery = searchQuery.replace(/\s+/g, '+');
-        const maxResults = Math.min(Math.max(limit, 1), 10);
+        const maxResults = Math.min(Math.max(limit, 1), 50);
 
         const cacheKey = `${formattedQuery}-${locale}-${type}`;
 
