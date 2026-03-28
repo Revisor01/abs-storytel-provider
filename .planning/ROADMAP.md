@@ -22,7 +22,11 @@ Three phases harden an existing, working metadata provider: first making failure
   3. Eine Suchanfrage mit mehr als 200 Zeichen oder unerlaubten Sonderzeichen wird mit 400 abgewiesen, bevor sie die Storytel API erreicht
   4. CORS-Ursprünge sind über `ALLOWED_ORIGINS` env var konfigurierbar (kein wildcard `*` im Default)
   5. Auth-Token-Vergleich ist timing-safe (kein direkter String-Vergleich)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — provider.js: StorytelApiError einführen, DB-Fallback absichern (ERR-01, ERR-02, ERR-03)
+- [ ] 01-02-PLAN.md — server.js: CORS konfigurierbar, Auth timing-safe, Query-Validierung, 503 für API-Fehler (SEC-01, SEC-02, SEC-03, ERR-01, ERR-02)
 
 ### Phase 2: Observability
 **Goal**: Der Service ist im Betrieb lesbar, konfigurierbar und sauber herunterfahrbar
@@ -51,6 +55,6 @@ Three phases harden an existing, working metadata provider: first making failure
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Robustheit | 0/? | Not started | - |
+| 1. Robustheit | 0/2 | Planning done | - |
 | 2. Observability | 0/? | Not started | - |
 | 3. Performance | 0/? | Not started | - |
