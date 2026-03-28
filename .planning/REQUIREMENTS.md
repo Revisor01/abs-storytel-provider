@@ -13,9 +13,9 @@
 
 ### Security
 
-- [ ] **SEC-01**: CORS is restricted via environment variable (configurable allowed origins)
-- [ ] **SEC-02**: Auth token comparison uses timing-safe equality check
-- [ ] **SEC-03**: Query parameters are validated (max length, character filtering)
+- [x] **SEC-01**: CORS is restricted via environment variable (configurable allowed origins)
+- [x] **SEC-02**: Auth token comparison uses timing-safe equality check
+- [x] **SEC-03**: Query parameters are validated (max length, character filtering)
 
 ### Performance
 
@@ -58,9 +58,9 @@
 | ERR-01 | Phase 1 | Complete |
 | ERR-02 | Phase 1 | Complete |
 | ERR-03 | Phase 1 | Complete |
-| SEC-01 | Phase 1 | Pending |
-| SEC-02 | Phase 1 | Pending |
-| SEC-03 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Complete |
+| SEC-02 | Phase 1 | Complete |
+| SEC-03 | Phase 1 | Complete |
 | OPS-01 | Phase 2 | Pending |
 | OPS-02 | Phase 2 | Pending |
 | OPS-03 | Phase 2 | Pending |
