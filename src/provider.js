@@ -166,6 +166,10 @@ class StorytelProvider {
         let title = book.name;
         let subtitle = null;
 
+        // ReDoS-Audit (DATA-01): Alle Patterns verwenden ^.*? mit fixem Literal-Suffix.
+        // Bei replace() scannt die Engine linear — kein exponentielles Backtracking.
+        // Geprüft: safe für alle pattern-Gruppen (patterns, germanPatterns, abridgedPatterns).
+
         // These patterns match various series and volume indicators across different languages
         // Current Patterns for all Storytel regions
         const patterns = [
@@ -286,16 +290,27 @@ class StorytelProvider {
                 const safeSeriesName = this.escapeRegex(seriesName);
 
                 // Case 1: Series name at end after separator — "Title - SeriesName" or "Title, SeriesName"
-                const trailingRegex = new RegExp(`^(.+?)[-,]\\s*${safeSeriesName}$`, 'i');
-                const trailingMatch = title.match(trailingRegex);
-                if (trailingMatch) {
-                    title = trailingMatch[1].trim();
-                }
-                // Case 2: Series name at start — "SeriesName ActualTitle"
-                else if (title.startsWith(seriesName)) {
-                    const remainder = title.slice(seriesName.length).replace(/^[\s,\-:]+/, '').trim();
-                    if (remainder.length > 0) {
-                        title = remainder;
+                // Guard: skip trailingRegex if seriesName is excessively long (prevents O(n*m) regex backtracking)
+                if (safeSeriesName.length <= 200) {
+                    const trailingRegex = new RegExp(`^(.+?)[-,]\\s*${safeSeriesName}$`, 'i');
+                    const trailingMatch = title.match(trailingRegex);
+                    if (trailingMatch) {
+                        title = trailingMatch[1].trim();
+                    }
+                    // Case 2: Series name at start — "SeriesName ActualTitle"
+                    else if (title.startsWith(seriesName)) {
+                        const remainder = title.slice(seriesName.length).replace(/^[\s,\-:]+/, '').trim();
+                        if (remainder.length > 0) {
+                            title = remainder;
+                        }
+                    }
+                } else {
+                    // Series name too long for safe regex — fall back to startsWith only
+                    if (title.startsWith(seriesName)) {
+                        const remainder = title.slice(seriesName.length).replace(/^[\s,\-:]+/, '').trim();
+                        if (remainder.length > 0) {
+                            title = remainder;
+                        }
                     }
                 }
             }
@@ -312,6 +327,8 @@ class StorytelProvider {
             }
         }
 
+        // ReDoS-Audit (DATA-01): Langer Alternations-Regex, aber jede Alternative ist KEYWORD\s*\d+
+        // — lineares Matching, kein verschachtelter Quantifier, kein katastrophales Backtracking.
         // If title is only a number (incl. decimal like 22.1) or a generic episode/part/volume label, swap with subtitle
         if (/^(\d+[\d.]*|Episode\s*\d+|Folge\s*\d+|Band\s*\d+|Teil\s*\d+|Volume\s*\d+|Aflevering\s*\d+|Deel\s*\d+|Episódio\s*\d+|Parte\s*\d+|Episodio\s*\d+|Volumen\s*\d+|Afsnit\s*\d+|Bind\s*\d+|Del\s*\d+|Jakso\s*\d+|Volyymi\s*\d+|Osa\s*\d+|Épisode\s*\d+|Tome\s*\d+|Partie\s*\d+|Bagian\s*\d+|Avsnitt\s*\d+|Odcinek\s*\d+|Tom\s*\d+|Część\s*\d+|Þáttur\s*\d+|Bindi\s*\d+|Hluti\s*\d+|епизод\s*\d+|том\s*\d+|част\s*\d+|حلقة\s*\d+|مجلد\s*\d+|جزء\s*\d+|פרק\s*\d+|כרך\s*\d+|חלק\s*\d+|कड़ी\s*\d+|खण्ड\s*\d+|भाग\s*\d+)$/i.test(title.trim()) && subtitle) {
             title = subtitle;
