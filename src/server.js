@@ -51,6 +51,19 @@ const validateRegion = (req, res, next) => {
     next();
 };
 
+const validateQuery = (req, res, next) => {
+    const query = req.query.query || req.query.title || '';
+    if (query.length > 200) {
+        return res.status(400).json({ error: 'Query too long (max 200 characters)' });
+    }
+    // Blockiere Sonderzeichen die in API-Queries nichts zu suchen haben
+    // Erlaubt: Buchstaben, Zahlen, Leerzeichen, Bindestrich, Apostroph, Punkt, Komma, Doppelpunkt, Anführungszeichen
+    if (/[<>{|}\\]/.test(query)) {
+        return res.status(400).json({ error: 'Query contains invalid characters' });
+    }
+    next();
+};
+
 // Log incoming requests for debugging
 app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} query=${JSON.stringify(req.query)}`);
@@ -61,7 +74,7 @@ app.use((req, res, next) => {
 // The /audiobook/ and /book/ endpoints handle specific filtering
 
 // Original search endpoint
-app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
+app.get('/:region/search', checkAuth, validateRegion, validateQuery, async (req, res) => {
     const { query = '', title = '', author = '', limit } = req.query;
     const searchQuery = query || title;
     const region = req.params.region;
@@ -74,13 +87,17 @@ app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
         const results = await provider.searchBooks(searchQuery, author, region, 'all', limit ? parseInt(limit) : 5);
         res.json(results);
     } catch (error) {
+        if (error instanceof StorytelApiError) {
+            console.error('Storytel API error:', error.message);
+            return res.status(503).json({ error: 'Storytel API unavailable', details: error.message });
+        }
         console.error('Search error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
 // E-Book search endpoint
-app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
+app.get('/:region/book/search', checkAuth, validateRegion, validateQuery, async (req, res) => {
     const { query = '', title = '', author = '', limit } = req.query;
     const searchQuery = query || title;
     const region = req.params.region;
@@ -93,13 +110,17 @@ app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
         const results = await provider.searchBooks(searchQuery, author, region, 'ebook', limit ? parseInt(limit) : 5);
         res.json(results);
     } catch (error) {
+        if (error instanceof StorytelApiError) {
+            console.error('Storytel API error:', error.message);
+            return res.status(503).json({ error: 'Storytel API unavailable', details: error.message });
+        }
         console.error('Book search error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
 // Audiobook search endpoint
-app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res) => {
+app.get('/:region/audiobook/search', checkAuth, validateRegion, validateQuery, async (req, res) => {
     const { query = '', title = '', author = '', limit } = req.query;
     const searchQuery = query || title;
     const region = req.params.region;
@@ -125,6 +146,10 @@ app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res)
             stats
         });
     } catch (error) {
+        if (error instanceof StorytelApiError) {
+            console.error('Storytel API error:', error.message);
+            return res.status(503).json({ error: 'Storytel API unavailable', details: error.message });
+        }
         console.error('Audiobook search error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
