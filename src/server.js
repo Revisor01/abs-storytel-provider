@@ -1,18 +1,43 @@
 // server.js
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const { StorytelProvider, StorytelApiError } = require('./provider');
 
 const app = express();
 const port = process.env.PORT || 3000;
 const auth = process.env.AUTH;
 
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : null;  // null = kein Wildcard-Default mehr, nur explizit erlaubte Origins
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Erlaubt: kein Origin-Header (same-origin, curl, ABS-intern)
+        if (!origin) return callback(null, true);
+        // Erlaubt: wenn ALLOWED_ORIGINS gesetzt und Origin enthalten
+        if (allowedOrigins && allowedOrigins.includes(origin)) return callback(null, true);
+        // Abgelehnt: wenn ALLOWED_ORIGINS gesetzt aber Origin nicht enthalten
+        if (allowedOrigins) return callback(new Error(`Origin ${origin} not allowed`), false);
+        // Kein ALLOWED_ORIGINS gesetzt: alle Origins erlauben (Entwicklungsmodus)
+        return callback(null, true);
+    },
+    credentials: true
+}));
 
 const provider = new StorytelProvider();
 
 const checkAuth = (req, res, next) => {
-    if (auth && (!req.headers.authorization || req.headers.authorization !== auth)) {
+    if (!auth) return next();  // Kein Auth konfiguriert — durchlassen
+    const provided = req.headers.authorization || '';
+    // crypto.timingSafeEqual braucht Buffer gleicher Länge
+    const authBuf = Buffer.from(auth);
+    const providedBuf = Buffer.alloc(authBuf.length);
+    Buffer.from(provided).copy(providedBuf);
+    const valid = crypto.timingSafeEqual(authBuf, providedBuf)
+        && provided.length === auth.length;  // Längen-Check separat (sicherheitshalber explizit)
+    if (!valid) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
     next();
