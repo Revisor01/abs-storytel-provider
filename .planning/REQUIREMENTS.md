@@ -19,9 +19,9 @@
 
 ### Performance
 
-- [ ] **PERF-01**: Cache has automatic TTL-based eviction and size monitoring
+- [x] **PERF-01**: Cache has automatic TTL-based eviction and size monitoring
 - [ ] **PERF-02**: Axios timeout reduced to 10-15 seconds
-- [ ] **PERF-03**: Concurrent identical queries are deduplicated (single API call, shared result)
+- [x] **PERF-03**: Concurrent identical queries are deduplicated (single API call, shared result)
 
 ### Operational
 
@@ -66,9 +66,9 @@
 | OPS-03 | Phase 2 | Complete |
 | OPS-04 | Phase 2 | Complete |
 | DATA-01 | Phase 2 | Complete |
-| PERF-01 | Phase 3 | Pending |
+| PERF-01 | Phase 3 | Complete |
 | PERF-02 | Phase 3 | Pending |
-| PERF-03 | Phase 3 | Pending |
+| PERF-03 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 14 total
