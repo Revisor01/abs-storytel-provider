@@ -3,6 +3,14 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
+class StorytelApiError extends Error {
+    constructor(message, cause) {
+        super(message);
+        this.name = 'StorytelApiError';
+        this.cause = cause;
+    }
+}
+
 // Persistent SQLite cache
 const dbPath = process.env.CACHE_DB || path.join(__dirname, '..', 'data', 'cache.db');
 const dbDir = path.dirname(dbPath);
@@ -457,10 +465,10 @@ class StorytelProvider {
             return result;
         } catch (error) {
             console.error('Error searching books:', error.message);
-            return { matches: [] };
+            throw new StorytelApiError('Storytel API request failed', error);
         }
     }
 
 }
 
-module.exports = StorytelProvider;
+module.exports = { StorytelProvider, StorytelApiError };
