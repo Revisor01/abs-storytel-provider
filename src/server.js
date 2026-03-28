@@ -1,7 +1,8 @@
 // server.js
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
-const { StorytelProvider, getDbStatus, closeDb } = require('./provider');
+const { StorytelProvider, StorytelApiError, getDbStatus, closeDb } = require('./provider');
 const logger = require('./logger');
 const { PORT, DEFAULT_LIMIT, AXIOS_TIMEOUT_MS } = require('./config');
 
@@ -9,13 +10,37 @@ const app = express();
 const port = PORT;
 const auth = process.env.AUTH;
 
-app.use(cors());
+// CORS configuration (SEC-01)
+const allowedOrigins = process.env.ALLOWED_ORIGINS;
+if (allowedOrigins) {
+    const origins = allowedOrigins.split(',').map(o => o.trim());
+    app.use(cors({
+        origin: (origin, callback) => {
+            if (!origin || origins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        }
+    }));
+} else {
+    app.use(cors());
+}
 
 const provider = new StorytelProvider();
 
+// Timing-safe auth comparison (SEC-02)
 const checkAuth = (req, res, next) => {
-    if (auth && (!req.headers.authorization || req.headers.authorization !== auth)) {
-        return res.status(401).json({ error: 'Unauthorized' });
+    if (auth) {
+        const token = req.headers.authorization || '';
+        if (token.length !== auth.length) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        const a = Buffer.from(token);
+        const b = Buffer.from(auth);
+        if (!crypto.timingSafeEqual(a, b)) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
     }
     next();
 };
@@ -24,6 +49,18 @@ const validateRegion = (req, res, next) => {
     const region = req.params.region;
     if (!region) {
         return res.status(400).json({ error: 'Region parameter is required' });
+    }
+    next();
+};
+
+// Query validation middleware (SEC-03)
+const validateQuery = (req, res, next) => {
+    const query = req.query.query || req.query.title || '';
+    if (query.length > 200) {
+        return res.status(400).json({ error: 'Query too long (max 200 characters)' });
+    }
+    if (/[<>{|}\\]/.test(query)) {
+        return res.status(400).json({ error: 'Query contains invalid characters' });
     }
     next();
 };
@@ -51,7 +88,7 @@ app.get('/health', (req, res) => {
 // The /audiobook/ and /book/ endpoints handle specific filtering
 
 // Original search endpoint
-app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
+app.get('/:region/search', checkAuth, validateRegion, validateQuery, async (req, res) => {
     const { query = '', title = '', author = '', limit } = req.query;
     const searchQuery = query || title;
     const region = req.params.region;
@@ -64,13 +101,18 @@ app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
         const results = await provider.searchBooks(searchQuery, author, region, 'all', limit ? parseInt(limit) : DEFAULT_LIMIT);
         res.json(results);
     } catch (error) {
-        logger.error({ err: error.message }, 'search error');
-        res.status(500).json({ error: 'Internal server error' });
+        if (error instanceof StorytelApiError) {
+            logger.warn({ err: error.message }, 'storytel API unavailable');
+            res.status(503).json({ error: 'Storytel API unavailable', details: error.message });
+        } else {
+            logger.error({ err: error.message }, 'search error');
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
 });
 
 // E-Book search endpoint
-app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
+app.get('/:region/book/search', checkAuth, validateRegion, validateQuery, async (req, res) => {
     const { query = '', title = '', author = '', limit } = req.query;
     const searchQuery = query || title;
     const region = req.params.region;
@@ -83,13 +125,18 @@ app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
         const results = await provider.searchBooks(searchQuery, author, region, 'ebook', limit ? parseInt(limit) : DEFAULT_LIMIT);
         res.json(results);
     } catch (error) {
-        logger.error({ err: error.message }, 'book search error');
-        res.status(500).json({ error: 'Internal server error' });
+        if (error instanceof StorytelApiError) {
+            logger.warn({ err: error.message }, 'storytel API unavailable');
+            res.status(503).json({ error: 'Storytel API unavailable', details: error.message });
+        } else {
+            logger.error({ err: error.message }, 'book search error');
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
 });
 
 // Audiobook search endpoint
-app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res) => {
+app.get('/:region/audiobook/search', checkAuth, validateRegion, validateQuery, async (req, res) => {
     const { query = '', title = '', author = '', limit } = req.query;
     const searchQuery = query || title;
     const region = req.params.region;
@@ -115,8 +162,13 @@ app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res)
             stats
         });
     } catch (error) {
-        logger.error({ err: error.message }, 'audiobook search error');
-        res.status(500).json({ error: 'Internal server error' });
+        if (error instanceof StorytelApiError) {
+            logger.warn({ err: error.message }, 'storytel API unavailable');
+            res.status(503).json({ error: 'Storytel API unavailable', details: error.message });
+        } else {
+            logger.error({ err: error.message }, 'audiobook search error');
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
 });
 
