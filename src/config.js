@@ -6,4 +6,5 @@ module.exports = {
     MAX_LIMIT: parseInt(process.env.MAX_LIMIT || '50', 10),
     CACHE_DB_PATH: process.env.CACHE_DB || require('path').join(__dirname, '..', 'data', 'cache.db'),
     LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+    CACHE_EVICTION_DAYS: parseInt(process.env.CACHE_EVICTION_DAYS || '30', 10),
 };
