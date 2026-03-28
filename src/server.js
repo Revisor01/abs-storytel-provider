@@ -1,7 +1,7 @@
 // server.js
 const express = require('express');
 const cors = require('cors');
-const StorytelProvider = require('./provider');
+const { StorytelProvider, getDbStatus, closeDb } = require('./provider');
 const logger = require('./logger');
 const { PORT, DEFAULT_LIMIT } = require('./config');
 
@@ -32,6 +32,19 @@ const validateRegion = (req, res, next) => {
 app.use((req, res, next) => {
     logger.info({ method: req.method, url: req.originalUrl, query: req.query }, 'request');
     next();
+});
+
+// Health endpoint (OPS-01)
+app.get('/health', (req, res) => {
+    const cacheStatus = getDbStatus();
+    res.json({
+        status: 'ok',
+        uptime: Math.floor(process.uptime()),
+        cache: {
+            available: cacheStatus.available,
+            size: cacheStatus.size
+        }
+    });
 });
 
 // ABS sends mediaType=book for all book types — always search all
@@ -107,6 +120,26 @@ app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res)
     }
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
     logger.info({ port }, 'Storytel provider listening');
 });
+
+// Graceful shutdown (OPS-02)
+function shutdown(signal) {
+    logger.info({ signal }, 'shutdown signal received — closing server');
+    server.close(() => {
+        logger.info('HTTP server closed');
+        closeDb();
+        logger.info('database closed — exiting');
+        process.exit(0);
+    });
+
+    // Force exit after 10 seconds if server.close() hangs
+    setTimeout(() => {
+        logger.warn('forced exit after timeout');
+        process.exit(1);
+    }, 10000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
