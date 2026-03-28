@@ -406,7 +406,8 @@ class StorytelProvider {
             description: this.stripHtml(this.ensureString(rawDescription)),
             publisher: this.ensureString(abook ? abook.publisher?.name : ebook?.publisher?.name),
             publishedYear: publishedYear,
-            isbn: this.ensureString(abook ? abook.isbn : ebook?.isbn)
+            isbn: this.ensureString(abook ? abook.isbn : ebook?.isbn),
+            abridged: book.abridged === 1 ? true : undefined
         };
 
         // Remove undefined values
