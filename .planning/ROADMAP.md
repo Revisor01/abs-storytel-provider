@@ -25,7 +25,7 @@ Three phases harden an existing, working metadata provider: first making failure
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — provider.js: StorytelApiError einführen, DB-Fallback absichern (ERR-01, ERR-02, ERR-03)
+- [x] 01-01-PLAN.md — provider.js: StorytelApiError einführen, DB-Fallback absichern (ERR-01, ERR-02, ERR-03)
 - [ ] 01-02-PLAN.md — server.js: CORS konfigurierbar, Auth timing-safe, Query-Validierung, 503 für API-Fehler (SEC-01, SEC-02, SEC-03, ERR-01, ERR-02)
 
 ### Phase 2: Observability
