@@ -3,13 +3,16 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const logger = require('./logger');
-const { AXIOS_TIMEOUT_MS, DEFAULT_LIMIT, MAX_LIMIT, CACHE_DB_PATH } = require('./config');
+const { AXIOS_TIMEOUT_MS, DEFAULT_LIMIT, MAX_LIMIT, CACHE_DB_PATH, CACHE_EVICTION_DAYS } = require('./config');
 
 // Persistent SQLite cache
 const dbPath = CACHE_DB_PATH;
 let db = null;
 let getCache = null;
 let setCache = null;
+
+// PERF-03: In-flight deduplication — prevents duplicate API calls for concurrent identical queries
+const inFlight = new Map();
 
 try {
     const dbDir = path.dirname(dbPath);
@@ -28,6 +31,14 @@ try {
 
     // Clean up empty cache entries from previous versions
     db.exec(`DELETE FROM search_cache WHERE response = '{"matches":[]}'`);
+
+    // PERF-01: Eviction — remove entries older than CACHE_EVICTION_DAYS days
+    const evictionThreshold = Date.now() - CACHE_EVICTION_DAYS * 24 * 60 * 60 * 1000;
+    const evicted = db.prepare('DELETE FROM search_cache WHERE created_at < ?').run(evictionThreshold);
+    if (evicted.changes > 0) {
+        db.exec('VACUUM');
+    }
+    logger.info({ evictedRows: evicted.changes, thresholdDays: CACHE_EVICTION_DAYS }, 'cache eviction complete');
 
     getCache = db.prepare('SELECT response FROM search_cache WHERE cache_key = ?');
     setCache = db.prepare('INSERT OR REPLACE INTO search_cache (cache_key, response, created_at) VALUES (?, ?, ?)');
@@ -451,54 +462,67 @@ class StorytelProvider {
             }
         }
 
-        try {
-            let searchData = await this.fetchFromApi(formattedQuery, locale);
-            let books = searchData?.books || [];
-            logger.info({ count: books.length, query: formattedQuery }, 'search results received');
-
-            // Retry without author if combined search found nothing
-            if (books.length === 0 && author) {
-                const queryOnly = cleanQuery.replace(/\s+/g, '+');
-                logger.info({ query: queryOnly }, 'retrying without author');
-                searchData = await this.fetchFromApi(queryOnly, locale);
-                books = searchData?.books || [];
-                logger.info({ count: books.length }, 'retry results received');
-            }
-
-            let matches = [];
-            for (const book of books) {
-                if (!book.book || !book.book.id) continue;
-                const metadata = this.formatBookMetadata({ slb: book }, type);
-                if (metadata) {
-                    matches.push(metadata);
-                }
-            }
-
-            // Sort by author relevance if author was provided, then limit
-            if (author) {
-                matches.sort((a, b) =>
-                    this.authorMatchScore(b.author, author) - this.authorMatchScore(a.author, author)
-                );
-            }
-            matches = matches.slice(0, maxResults);
-
-            const result = { matches };
-
-            // Only cache non-empty results
-            if (matches.length > 0 && setCache) {
-                try {
-                    setCache.run(cacheKey, JSON.stringify(result), Date.now());
-                    logger.debug({ key: cacheKey }, 'cache write');
-                } catch (err) {
-                    logger.warn({ err: err.message, key: cacheKey }, 'cache write failed');
-                }
-            }
-
-            return result;
-        } catch (error) {
-            logger.error({ err: error.message, query: formattedQuery }, 'Storytel API request failed');
-            return { matches: [] };
+        // PERF-03: Return existing promise if same query is already in-flight
+        if (inFlight.has(cacheKey)) {
+            logger.debug({ key: cacheKey }, 'deduplication hit — reusing in-flight request');
+            return inFlight.get(cacheKey);
         }
+
+        const apiCallPromise = (async () => {
+            try {
+                let searchData = await this.fetchFromApi(formattedQuery, locale);
+                let books = searchData?.books || [];
+                logger.info({ count: books.length, query: formattedQuery }, 'search results received');
+
+                // Retry without author if combined search found nothing
+                if (books.length === 0 && author) {
+                    const queryOnly = cleanQuery.replace(/\s+/g, '+');
+                    logger.info({ query: queryOnly }, 'retrying without author');
+                    searchData = await this.fetchFromApi(queryOnly, locale);
+                    books = searchData?.books || [];
+                    logger.info({ count: books.length }, 'retry results received');
+                }
+
+                let matches = [];
+                for (const book of books) {
+                    if (!book.book || !book.book.id) continue;
+                    const metadata = this.formatBookMetadata({ slb: book }, type);
+                    if (metadata) {
+                        matches.push(metadata);
+                    }
+                }
+
+                // Sort by author relevance if author was provided, then limit
+                if (author) {
+                    matches.sort((a, b) =>
+                        this.authorMatchScore(b.author, author) - this.authorMatchScore(a.author, author)
+                    );
+                }
+                matches = matches.slice(0, maxResults);
+
+                const result = { matches };
+
+                // Only cache non-empty results
+                if (matches.length > 0 && setCache) {
+                    try {
+                        setCache.run(cacheKey, JSON.stringify(result), Date.now());
+                        logger.debug({ key: cacheKey }, 'cache write');
+                    } catch (err) {
+                        logger.warn({ err: err.message, key: cacheKey }, 'cache write failed');
+                    }
+                }
+
+                return result;
+            } catch (error) {
+                logger.error({ err: error.message, query: formattedQuery }, 'Storytel API request failed');
+                return { matches: [] };
+            } finally {
+                inFlight.delete(cacheKey);
+            }
+        })();
+
+        inFlight.set(cacheKey, apiCallPromise);
+        return apiCallPromise;
     }
 
 }
