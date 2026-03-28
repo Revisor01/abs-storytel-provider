@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { StorytelProvider, getDbStatus, closeDb } = require('./provider');
 const logger = require('./logger');
-const { PORT, DEFAULT_LIMIT } = require('./config');
+const { PORT, DEFAULT_LIMIT, AXIOS_TIMEOUT_MS } = require('./config');
 
 const app = express();
 const port = PORT;
@@ -121,7 +121,7 @@ app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res)
 });
 
 const server = app.listen(port, () => {
-    logger.info({ port }, 'Storytel provider listening');
+    logger.info({ port, axiosTimeoutMs: AXIOS_TIMEOUT_MS }, 'Storytel provider listening');
 });
 
 // Graceful shutdown (OPS-02)
