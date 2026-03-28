@@ -27,8 +27,8 @@
 
 - [ ] **OPS-01**: `/health` endpoint returns service status and cache info
 - [ ] **OPS-02**: Graceful shutdown on SIGTERM/SIGINT (drain requests, close DB)
-- [ ] **OPS-03**: Structured logging with levels (info, warn, error) replaces console.log
-- [ ] **OPS-04**: Magic numbers extracted to configuration constants or environment variables
+- [x] **OPS-03**: Structured logging with levels (info, warn, error) replaces console.log
+- [x] **OPS-04**: Magic numbers extracted to configuration constants or environment variables
 
 ### Data Quality
 
@@ -63,8 +63,8 @@
 | SEC-03 | Phase 1 | Complete |
 | OPS-01 | Phase 2 | Pending |
 | OPS-02 | Phase 2 | Pending |
-| OPS-03 | Phase 2 | Pending |
-| OPS-04 | Phase 2 | Pending |
+| OPS-03 | Phase 2 | Complete |
+| OPS-04 | Phase 2 | Complete |
 | DATA-01 | Phase 2 | Pending |
 | PERF-01 | Phase 3 | Pending |
 | PERF-02 | Phase 3 | Pending |
