@@ -7,25 +7,36 @@ const { AXIOS_TIMEOUT_MS, DEFAULT_LIMIT, MAX_LIMIT, CACHE_DB_PATH } = require('.
 
 // Persistent SQLite cache
 const dbPath = CACHE_DB_PATH;
-const dbDir = path.dirname(dbPath);
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+let db = null;
+let getCache = null;
+let setCache = null;
+
+try {
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+    }
+    db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS search_cache (
+            cache_key TEXT PRIMARY KEY,
+            response TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+    `);
+
+    // Clean up empty cache entries from previous versions
+    db.exec(`DELETE FROM search_cache WHERE response = '{"matches":[]}'`);
+
+    getCache = db.prepare('SELECT response FROM search_cache WHERE cache_key = ?');
+    setCache = db.prepare('INSERT OR REPLACE INTO search_cache (cache_key, response, created_at) VALUES (?, ?, ?)');
+} catch (err) {
+    logger.error({ err: err.message, path: dbPath }, 'SQLite cache init failed — running without cache');
+    db = null;
+    getCache = null;
+    setCache = null;
 }
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.exec(`
-    CREATE TABLE IF NOT EXISTS search_cache (
-        cache_key TEXT PRIMARY KEY,
-        response TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-    )
-`);
-
-// Clean up empty cache entries from previous versions
-db.exec(`DELETE FROM search_cache WHERE response = '{"matches":[]}'`);
-
-const getCache = db.prepare('SELECT response FROM search_cache WHERE cache_key = ?');
-const setCache = db.prepare('INSERT OR REPLACE INTO search_cache (cache_key, response, created_at) VALUES (?, ?, ?)');
 
 class StorytelProvider {
     constructor() {
@@ -428,10 +439,16 @@ class StorytelProvider {
         const cacheKey = `${formattedQuery}-${locale}-${type}`;
 
         // Check persistent cache
-        const cached = getCache.get(cacheKey);
-        if (cached) {
-            logger.debug({ key: cacheKey }, 'cache hit');
-            return JSON.parse(cached.response);
+        if (getCache) {
+            try {
+                const cached = getCache.get(cacheKey);
+                if (cached) {
+                    logger.debug({ key: cacheKey }, 'cache hit');
+                    return JSON.parse(cached.response);
+                }
+            } catch (err) {
+                logger.warn({ err: err.message, key: cacheKey }, 'cache read failed — fetching from API');
+            }
         }
 
         try {
@@ -468,9 +485,13 @@ class StorytelProvider {
             const result = { matches };
 
             // Only cache non-empty results
-            if (matches.length > 0) {
-                setCache.run(cacheKey, JSON.stringify(result), Date.now());
-                logger.debug({ key: cacheKey }, 'cache write');
+            if (matches.length > 0 && setCache) {
+                try {
+                    setCache.run(cacheKey, JSON.stringify(result), Date.now());
+                    logger.debug({ key: cacheKey }, 'cache write');
+                } catch (err) {
+                    logger.warn({ err: err.message, key: cacheKey }, 'cache write failed');
+                }
             }
 
             return result;
@@ -482,4 +503,32 @@ class StorytelProvider {
 
 }
 
-module.exports = StorytelProvider;
+/**
+ * Returns current cache status for health endpoint
+ * @returns {{ available: boolean, size: number|null }}
+ */
+function getDbStatus() {
+    if (!db) return { available: false, size: null };
+    try {
+        const row = db.prepare('SELECT COUNT(*) as count FROM search_cache').get();
+        return { available: true, size: row.count };
+    } catch (err) {
+        return { available: false, size: null };
+    }
+}
+
+/**
+ * Closes the SQLite database connection gracefully
+ */
+function closeDb() {
+    if (db) {
+        try {
+            db.close();
+            db = null;
+        } catch (err) {
+            // best-effort close
+        }
+    }
+}
+
+module.exports = { StorytelProvider, getDbStatus, closeDb };
