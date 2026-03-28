@@ -38,7 +38,13 @@ Plans:
   3. `SIGTERM` beendet den Server sauber: laufende Anfragen werden abgeschlossen, die DB wird geschlossen
   4. Alle Magic Numbers (Timeout, Default-Limit, Max-Limit) sind als benannte Konstanten oder env vars definiert
   5. Regex-Patterns sind auf ReDoS-Anfälligkeit geprüft und ggf. abgesichert
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — pino Logger + config.js Konstanten; console.log/error in beiden Quelldateien ersetzen (OPS-03, OPS-04)
+- [ ] 02-02-PLAN.md — ReDoS-Audit aller Regex-Patterns in provider.js, trailingRegex absichern (DATA-01)
+- [ ] 02-03-PLAN.md — GET /health Endpoint + SIGTERM/SIGINT Graceful Shutdown (OPS-01, OPS-02)
+
 **UI hint**: no
 
 ### Phase 3: Performance
@@ -56,5 +62,5 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Robustheit | 0/2 | Planning done | - |
-| 2. Observability | 0/? | Not started | - |
+| 2. Observability | 0/3 | Planning done | - |
 | 3. Performance | 0/? | Not started | - |
