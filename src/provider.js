@@ -2,9 +2,11 @@ const axios = require('axios');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const logger = require('./logger');
+const { AXIOS_TIMEOUT_MS, DEFAULT_LIMIT, MAX_LIMIT, CACHE_DB_PATH } = require('./config');
 
 // Persistent SQLite cache
-const dbPath = process.env.CACHE_DB || path.join(__dirname, '..', 'data', 'cache.db');
+const dbPath = CACHE_DB_PATH;
 const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
@@ -389,7 +391,7 @@ class StorytelProvider {
         const url = `${this.baseSearchUrl}?request_locale=${encodeURIComponent(locale)}&q=${encodeURIComponent(formattedQuery)}`;
 
         const response = await axios.get(url, {
-            timeout: 30000,
+            timeout: AXIOS_TIMEOUT_MS,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
                 'Accept': 'application/json',
@@ -400,33 +402,33 @@ class StorytelProvider {
         return response.data;
     }
 
-    async searchBooks(query, author = '', locale, type = 'all', limit = 20) {
+    async searchBooks(query, author = '', locale, type = 'all', limit = DEFAULT_LIMIT) {
         const cleanQuery = query.split(':')[0].trim();
         const searchQuery = author ? `${cleanQuery} ${author}` : cleanQuery;
         const formattedQuery = searchQuery.replace(/\s+/g, '+');
-        const maxResults = Math.min(Math.max(limit, 1), 50);
+        const maxResults = Math.min(Math.max(limit, 1), MAX_LIMIT);
 
         const cacheKey = `${formattedQuery}-${locale}-${type}`;
 
         // Check persistent cache
         const cached = getCache.get(cacheKey);
         if (cached) {
-            console.log(`[cache] HIT for "${cacheKey}"`);
+            logger.debug({ key: cacheKey }, 'cache hit');
             return JSON.parse(cached.response);
         }
 
         try {
             let searchData = await this.fetchFromApi(formattedQuery, locale);
             let books = searchData?.books || [];
-            console.log(`Found ${books.length} books in search results`);
+            logger.info({ count: books.length, query: formattedQuery }, 'search results received');
 
             // Retry without author if combined search found nothing
             if (books.length === 0 && author) {
                 const queryOnly = cleanQuery.replace(/\s+/g, '+');
-                console.log(`Retrying without author: "${queryOnly}"`);
+                logger.info({ query: queryOnly }, 'retrying without author');
                 searchData = await this.fetchFromApi(queryOnly, locale);
                 books = searchData?.books || [];
-                console.log(`Retry found ${books.length} books`);
+                logger.info({ count: books.length }, 'retry results received');
             }
 
             let matches = [];
@@ -451,12 +453,12 @@ class StorytelProvider {
             // Only cache non-empty results
             if (matches.length > 0) {
                 setCache.run(cacheKey, JSON.stringify(result), Date.now());
-                console.log(`[cache] WRITE for "${cacheKey}"`);
+                logger.debug({ key: cacheKey }, 'cache write');
             }
 
             return result;
         } catch (error) {
-            console.error('Error searching books:', error.message);
+            logger.error({ err: error.message, query: formattedQuery }, 'Storytel API request failed');
             return { matches: [] };
         }
     }

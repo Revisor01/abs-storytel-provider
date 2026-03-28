@@ -2,9 +2,11 @@
 const express = require('express');
 const cors = require('cors');
 const StorytelProvider = require('./provider');
+const logger = require('./logger');
+const { PORT, DEFAULT_LIMIT } = require('./config');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = PORT;
 const auth = process.env.AUTH;
 
 app.use(cors());
@@ -28,7 +30,7 @@ const validateRegion = (req, res, next) => {
 
 // Log incoming requests for debugging
 app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} query=${JSON.stringify(req.query)}`);
+    logger.info({ method: req.method, url: req.originalUrl, query: req.query }, 'request');
     next();
 });
 
@@ -46,10 +48,10 @@ app.get('/:region/search', checkAuth, validateRegion, async (req, res) => {
     }
 
     try {
-        const results = await provider.searchBooks(searchQuery, author, region, 'all', limit ? parseInt(limit) : 5);
+        const results = await provider.searchBooks(searchQuery, author, region, 'all', limit ? parseInt(limit) : DEFAULT_LIMIT);
         res.json(results);
     } catch (error) {
-        console.error('Search error:', error);
+        logger.error({ err: error.message }, 'search error');
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -65,10 +67,10 @@ app.get('/:region/book/search', checkAuth, validateRegion, async (req, res) => {
     }
 
     try {
-        const results = await provider.searchBooks(searchQuery, author, region, 'ebook', limit ? parseInt(limit) : 5);
+        const results = await provider.searchBooks(searchQuery, author, region, 'ebook', limit ? parseInt(limit) : DEFAULT_LIMIT);
         res.json(results);
     } catch (error) {
-        console.error('Book search error:', error);
+        logger.error({ err: error.message }, 'book search error');
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -84,7 +86,7 @@ app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res)
     }
 
     try {
-        const results = await provider.searchBooks(searchQuery, author, region, 'audiobook', limit ? parseInt(limit) : 5);
+        const results = await provider.searchBooks(searchQuery, author, region, 'audiobook', limit ? parseInt(limit) : DEFAULT_LIMIT);
 
         const audiobooks = results.matches;
         const stats = {
@@ -100,11 +102,11 @@ app.get('/:region/audiobook/search', checkAuth, validateRegion, async (req, res)
             stats
         });
     } catch (error) {
-        console.error('Audiobook search error:', error);
+        logger.error({ err: error.message }, 'audiobook search error');
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
 app.listen(port, () => {
-    console.log(`Storytel provider listening on port ${port}`);
+    logger.info({ port }, 'Storytel provider listening');
 });
