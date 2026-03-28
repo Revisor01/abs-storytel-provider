@@ -55,7 +55,11 @@ Plans:
   1. Der SQLite-Cache hat eine automatische Eviction: Einträge älter als 30 Tage werden beim Start bereinigt und ein Vacuum ausgeführt
   2. Der Axios-Timeout für Storytel-Anfragen beträgt maximal 15 Sekunden (messbar im Log)
   3. Zwei gleichzeitige identische Suchanfragen lösen nur einen einzigen Storytel-API-Call aus — das zweite Request teilt das Ergebnis des ersten
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — config.js: AXIOS_TIMEOUT_MS Default auf 15000 ms reduzieren, Startup-Log erweitern (PERF-02)
+- [ ] 03-02-PLAN.md — provider.js: Cache-Eviction beim Start (30 Tage TTL + VACUUM) + Request-Deduplication via in-flight Map (PERF-01, PERF-03)
 
 ## Progress
 
@@ -63,4 +67,4 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Robustheit | 0/2 | Planning done | - |
 | 2. Observability | 0/3 | Planning done | - |
-| 3. Performance | 0/? | Not started | - |
+| 3. Performance | 0/2 | Planning done | - |
