@@ -42,7 +42,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — pino Logger + config.js Konstanten; console.log/error in beiden Quelldateien ersetzen (OPS-03, OPS-04)
-- [ ] 02-02-PLAN.md — ReDoS-Audit aller Regex-Patterns in provider.js, trailingRegex absichern (DATA-01)
+- [x] 02-02-PLAN.md — ReDoS-Audit aller Regex-Patterns in provider.js, trailingRegex absichern (DATA-01)
 - [ ] 02-03-PLAN.md — GET /health Endpoint + SIGTERM/SIGINT Graceful Shutdown (OPS-01, OPS-02)
 
 **UI hint**: no

@@ -32,7 +32,7 @@
 
 ### Data Quality
 
-- [ ] **DATA-01**: Regex patterns reviewed for ReDoS vulnerability and safeguarded
+- [x] **DATA-01**: Regex patterns reviewed for ReDoS vulnerability and safeguarded
 
 ## v2 Requirements
 
@@ -65,7 +65,7 @@
 | OPS-02 | Phase 2 | Pending |
 | OPS-03 | Phase 2 | Complete |
 | OPS-04 | Phase 2 | Complete |
-| DATA-01 | Phase 2 | Pending |
+| DATA-01 | Phase 2 | Complete |
 | PERF-01 | Phase 3 | Pending |
 | PERF-02 | Phase 3 | Pending |
 | PERF-03 | Phase 3 | Pending |
