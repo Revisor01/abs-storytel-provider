@@ -14,6 +14,11 @@ let setCache = null;
 // PERF-03: In-flight deduplication — prevents duplicate API calls for concurrent identical queries
 const inFlight = new Map();
 
+// Fallback for Storytel category IDs that return empty `title` across all locales (see GitHub #12)
+const CATEGORY_ID_FALLBACK = {
+    22: 'True Crime',
+};
+
 try {
     const dbDir = path.dirname(dbPath);
     if (!fs.existsSync(dbDir)) {
@@ -368,7 +373,7 @@ class StorytelProvider {
         }
 
         const genres = book.category
-            ? this.splitGenre(this.ensureString(book.category.title))
+            ? this.splitGenre(this.ensureString(book.category.title || CATEGORY_ID_FALLBACK[book.category.id]))
             : [];
 
         const tags = book.tags && book.tags.length > 0
