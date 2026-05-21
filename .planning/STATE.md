@@ -85,8 +85,14 @@ None yet.
 
 None yet.
 
+## Quick Tasks Completed
+
+| Date       | Slug                            | Commit  | Notes |
+|------------|---------------------------------|---------|-------|
+| 2026-05-21 | fix-true-crime-genres-null      | 70fa690 | Fixes GitHub #12 — True Crime category id 22 returns empty title |
+
 ## Session Continuity
 
-Last session: 2026-03-28T23:00:00.000Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-05-21T16:40:00.000Z
+Stopped at: Quick task fix-true-crime-genres-null complete
 Resume file: None
