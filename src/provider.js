@@ -117,16 +117,23 @@ class StorytelProvider {
      */
     stripHtml(str) {
         if (!str) return '';
-        return str
+        let s = String(str)
             .replace(/<br\s*\/?>/gi, '\n')
-            .replace(/<\/p>/gi, '\n')
-            .replace(/<[^>]+>/g, '')
-            .replace(/&amp;/g, '&')
+            .replace(/<\/p>/gi, '\n');
+        // Strip tags to a fixpoint so nested fragments like "<scr<b>ipt>" cannot survive
+        let prev;
+        do {
+            prev = s;
+            s = s.replace(/<[^>]+>/g, '');
+        } while (s !== prev);
+        return s
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
             .replace(/&quot;/g, '"')
             .replace(/&#039;/g, "'")
             .replace(/&nbsp;/g, ' ')
+            // &amp; last, otherwise "&amp;lt;" would be double-unescaped to "<"
+            .replace(/&amp;/g, '&')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
     }
