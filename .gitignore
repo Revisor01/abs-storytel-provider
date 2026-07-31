@@ -116,3 +116,12 @@ dist
 .pnp.*
 
 .idea/
+
+# Local runtime data (SQLite cache)
+data/
+
+# Claude Code local settings and agent worktrees
+.claude/
+
+# macOS
+.DS_Store
