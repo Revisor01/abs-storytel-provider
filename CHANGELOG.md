@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-07-31
+
+### Security
+
+Fixes for all four findings from the first CodeQL scan (enabled in 2.0.2):
+
+- Reject non-string query parameters (`?query=a&query=b` array injection) in `validateQuery` — type confusion through parameter tampering (critical).
+- `stripHtml`: strip HTML tags to a fixpoint so nested fragments like `<scr<b>ipt>` cannot survive (incomplete multi-character sanitization, high).
+- `stripHtml`: decode `&amp;` last so `&amp;lt;` is no longer double-unescaped to `<` (double escaping, high).
+- CI workflow: explicit least-privilege `permissions` block (`contents: read`, `packages: write`) for the GITHUB_TOKEN (medium).
+
 ## [2.0.2] - 2026-07-31
 
 ### Security
@@ -56,7 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Last release before the 2.x hardening milestone. See [GitHub releases] for earlier history.
 
-[Unreleased]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.2...HEAD
+[Unreleased]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.3...HEAD
+[2.0.3]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/Revisor01/abs-storytel-provider/compare/v1.6.3...v2.0.0

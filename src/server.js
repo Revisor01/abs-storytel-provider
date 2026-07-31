@@ -55,6 +55,12 @@ const validateRegion = (req, res, next) => {
 
 // Query validation middleware (SEC-03)
 const validateQuery = (req, res, next) => {
+    // Express parses repeated params (?query=a&query=b) into arrays — reject non-strings
+    for (const key of ['query', 'title', 'author', 'limit']) {
+        if (req.query[key] !== undefined && typeof req.query[key] !== 'string') {
+            return res.status(400).json({ error: `Parameter '${key}' must be a single string value` });
+        }
+    }
     const query = req.query.query || req.query.title || '';
     if (query.length > 200) {
         return res.status(400).json({ error: 'Query too long (max 200 characters)' });
