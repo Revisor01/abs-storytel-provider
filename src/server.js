@@ -61,7 +61,9 @@ const validateQuery = (req, res, next) => {
             return res.status(400).json({ error: `Parameter '${key}' must be a single string value` });
         }
     }
-    const query = req.query.query || req.query.title || '';
+    const queryParam = typeof req.query.query === 'string' ? req.query.query : '';
+    const titleParam = typeof req.query.title === 'string' ? req.query.title : '';
+    const query = queryParam || titleParam;
     if (query.length > 200) {
         return res.status(400).json({ error: 'Query too long (max 200 characters)' });
     }

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `validateQuery`: use explicit `typeof` string guards when reading `query`/`title` so CodeQL's data-flow analysis recognizes the type check (no behavioral change — arrays were already rejected at runtime since 2.0.3).
+
 ## [2.0.3] - 2026-07-31
 
 ### Security
