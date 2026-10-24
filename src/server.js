@@ -56,7 +56,7 @@ const validateRegion = (req, res, next) => {
 // Query validation middleware (SEC-03)
 const validateQuery = (req, res, next) => {
     // Express parses repeated params (?query=a&query=b) into arrays — reject non-strings
-    for (const key of ['query', 'title', 'author', 'limit']) {
+    for (const key of ['query', 'title', 'author', 'limit', 'isbn']) {
         if (req.query[key] !== undefined && typeof req.query[key] !== 'string') {
             return res.status(400).json({ error: `Parameter '${key}' must be a single string value` });
         }
@@ -69,6 +69,9 @@ const validateQuery = (req, res, next) => {
     }
     if (/[<>{|}\\]/.test(query)) {
         return res.status(400).json({ error: 'Query contains invalid characters' });
+    }
+    if (typeof req.query.limit === 'string' && !/^\d{1,3}$/.test(req.query.limit)) {
+        return res.status(400).json({ error: "Parameter 'limit' must be a positive integer" });
     }
     next();
 };
@@ -95,9 +98,13 @@ app.get('/health', (req, res) => {
 // ABS sends mediaType=book for all book types — always search all
 // The /audiobook/ and /book/ endpoints handle specific filtering
 
-// Original search endpoint
-app.get('/:region/search', checkAuth, validateRegion, validateQuery, async (req, res) => {
-    const { query = '', title = '', author = '', limit } = req.query;
+/**
+ * Builds a search route handler for the given media type
+ * @param type {string} 'all', 'ebook' or 'audiobook'
+ * @param transform {function} Optional post-processing of the result
+ */
+const searchHandler = (type, transform = results => results) => async (req, res) => {
+    const { query = '', title = '', author = '', limit, isbn = '' } = req.query;
     const searchQuery = query || title;
     const region = req.params.region;
 
@@ -105,80 +112,47 @@ app.get('/:region/search', checkAuth, validateRegion, validateQuery, async (req,
         return res.status(400).json({ error: 'Query parameter is required' });
     }
 
+    const parsedLimit = limit ? parseInt(limit, 10) : DEFAULT_LIMIT;
+    // Malformed ISBNs are ignored rather than rejected — the ISBN only improves ranking
+    const strippedIsbn = typeof isbn === 'string' ? isbn.replace(/[\s-]/g, '').toUpperCase() : '';
+    const normalizedIsbn = /^(\d{9}[\dX]|\d{13})$/.test(strippedIsbn) ? strippedIsbn : '';
+
     try {
-        const results = await provider.searchBooks(searchQuery, author, region, 'all', limit ? parseInt(limit) : DEFAULT_LIMIT);
-        res.json(results);
+        const results = await provider.searchBooks(searchQuery, author, region, type, parsedLimit, normalizedIsbn);
+        res.json(transform(results));
     } catch (error) {
         if (error instanceof StorytelApiError) {
-            logger.warn({ err: error.message }, 'storytel API unavailable');
+            logger.warn({ err: error.message, type }, 'storytel API unavailable');
             res.status(503).json({ error: 'Storytel API unavailable', details: error.message });
         } else {
-            logger.error({ err: error.message }, 'search error');
+            logger.error({ err: error.message, stack: error.stack, type }, 'search error');
             res.status(500).json({ error: 'Internal server error' });
         }
     }
-});
+};
 
-// E-Book search endpoint
-app.get('/:region/book/search', checkAuth, validateRegion, validateQuery, async (req, res) => {
-    const { query = '', title = '', author = '', limit } = req.query;
-    const searchQuery = query || title;
-    const region = req.params.region;
-
-    if (!searchQuery) {
-        return res.status(400).json({ error: 'Query parameter is required' });
-    }
-
-    try {
-        const results = await provider.searchBooks(searchQuery, author, region, 'ebook', limit ? parseInt(limit) : DEFAULT_LIMIT);
-        res.json(results);
-    } catch (error) {
-        if (error instanceof StorytelApiError) {
-            logger.warn({ err: error.message }, 'storytel API unavailable');
-            res.status(503).json({ error: 'Storytel API unavailable', details: error.message });
-        } else {
-            logger.error({ err: error.message }, 'book search error');
-            res.status(500).json({ error: 'Internal server error' });
-        }
-    }
-});
-
-// Audiobook search endpoint
-app.get('/:region/audiobook/search', checkAuth, validateRegion, validateQuery, async (req, res) => {
-    const { query = '', title = '', author = '', limit } = req.query;
-    const searchQuery = query || title;
-    const region = req.params.region;
-
-    if (!searchQuery) {
-        return res.status(400).json({ error: 'Query parameter is required' });
-    }
-
-    try {
-        const results = await provider.searchBooks(searchQuery, author, region, 'audiobook', limit ? parseInt(limit) : DEFAULT_LIMIT);
-
-        const audiobooks = results.matches;
-        const stats = {
+const withAudiobookStats = results => {
+    const audiobooks = results.matches;
+    return {
+        matches: audiobooks,
+        stats: {
             total: audiobooks.length,
             withNarrator: audiobooks.filter(b => b.narrator).length,
             averageDuration: audiobooks.length > 0
                 ? Math.round(audiobooks.reduce((acc, b) => acc + (b.duration || 0), 0) / audiobooks.length)
                 : 0
-        };
-
-        res.json({
-            matches: audiobooks,
-            stats
-        });
-    } catch (error) {
-        if (error instanceof StorytelApiError) {
-            logger.warn({ err: error.message }, 'storytel API unavailable');
-            res.status(503).json({ error: 'Storytel API unavailable', details: error.message });
-        } else {
-            logger.error({ err: error.message }, 'audiobook search error');
-            res.status(500).json({ error: 'Internal server error' });
         }
-    }
-});
+    };
+};
+
+// Original search endpoint
+app.get('/:region/search', checkAuth, validateRegion, validateQuery, searchHandler('all'));
+
+// E-Book search endpoint
+app.get('/:region/book/search', checkAuth, validateRegion, validateQuery, searchHandler('ebook'));
+
+// Audiobook search endpoint
+app.get('/:region/audiobook/search', checkAuth, validateRegion, validateQuery, searchHandler('audiobook', withAudiobookStats));
 
 const server = app.listen(port, () => {
     logger.info({ port, axiosTimeoutMs: AXIOS_TIMEOUT_MS }, 'Storytel provider listening');
