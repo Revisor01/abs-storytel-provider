@@ -11,8 +11,21 @@ let db = null;
 let getCache = null;
 let setCache = null;
 
+// Bump when the cached response shape changes; entries with another prefix are dropped on startup
+// v2: full (unlimited) match list, www cover host, no null fields
+const CACHE_KEY_PREFIX = 'v2:';
+
 // PERF-03: In-flight deduplication — prevents duplicate API calls for concurrent identical queries
 const inFlight = new Map();
+
+// Thrown when the Storytel API is unreachable or answers with an error — mapped to HTTP 503
+class StorytelApiError extends Error {
+    constructor(message, cause) {
+        super(message);
+        this.name = 'StorytelApiError';
+        this.cause = cause;
+    }
+}
 
 // Fallback for Storytel category IDs that return empty `title` across all locales (see GitHub #12)
 const CATEGORY_ID_FALLBACK = {
@@ -36,6 +49,7 @@ try {
 
     // Clean up empty cache entries from previous versions
     db.exec(`DELETE FROM search_cache WHERE response = '{"matches":[]}'`);
+    db.prepare('DELETE FROM search_cache WHERE cache_key NOT LIKE ?').run(`${CACHE_KEY_PREFIX}%`);
 
     // PERF-01: Eviction — remove entries older than CACHE_EVICTION_DAYS days
     const evictionThreshold = Date.now() - CACHE_EVICTION_DAYS * 24 * 60 * 60 * 1000;
@@ -45,7 +59,8 @@ try {
     }
     logger.info({ evictedRows: evicted.changes, thresholdDays: CACHE_EVICTION_DAYS }, 'cache eviction complete');
 
-    getCache = db.prepare('SELECT response FROM search_cache WHERE cache_key = ?');
+    // Entries older than CACHE_EVICTION_DAYS are ignored on read too, so long-running containers don't serve stale data
+    getCache = db.prepare('SELECT response FROM search_cache WHERE cache_key = ? AND created_at >= ?');
     setCache = db.prepare('INSERT OR REPLACE INTO search_cache (cache_key, response, created_at) VALUES (?, ?, ?)');
 } catch (err) {
     logger.error({ err: err.message, path: dbPath }, 'SQLite cache init failed — running without cache');
@@ -54,18 +69,122 @@ try {
     setCache = null;
 }
 
+// ReDoS-Audit (DATA-01): Alle Patterns verwenden ^.*? mit fixem Literal-Suffix.
+// Bei replace() scannt die Engine linear — kein exponentielles Backtracking.
+// Geprüft: safe für alle pattern-Gruppen (seriesPatterns, germanPatterns, abridgedPatterns).
+
+// These patterns match various series and volume indicators across different languages
+// Current Patterns for all Storytel regions
+const seriesPatterns = [
+
+    // Belgium / Netherlands
+    /^.*?,\s*Aflevering\s*\d+:\s*/i,      // Dutch: "Aflevering" (Episode)
+    /^.*?,\s*Deel\s*\d+:\s*/i,            // Dutch: "Deel" (Part)
+
+    // Brazil
+    /^.*?,\s*Episódio\s*\d+:\s*/i,        // Portuguese: "Episódio" (Episode)
+    /^.*?,\s*Parte\s*\d+:\s*/i,           // Portuguese: "Parte" (Part)
+
+    // Bulgaria
+    /^.*?,\s*епизод\s*\d+:\s*/i,          // Bulgarian: "епизод" (Episode)
+    /^.*?,\s*том\s*\d+:\s*/i,             // Bulgarian: "том" (Volume)
+    /^.*?,\s*част\s*\d+:\s*/i,            // Bulgarian: "част" (Part)
+
+    // Colombia / Spain
+    /^.*?,\s*Episodio\s*\d+:\s*/i,        // Spanish: "Episodio" (Episode)
+    /^.*?,\s*Volumen\s*\d+:\s*/i,         // Spanish: "Volumen" (Volume)
+
+    // Denmark
+    /^.*?,\s*Afsnit\s*\d+:\s*/i,          // Danish: "Afsnit" (Episode)
+    /^.*?,\s*Bind\s*\d+:\s*/i,            // Danish: "Bind" (Volume)
+    /^.*?,\s*Del\s*\d+:\s*/i,             // Danish: "Del" (Part)
+
+    // Egypt / Saudi Arabia / United Arab Emirates
+    /^.*?,\s*حلقة\s*\d+:\s*/i,            // Arabic: "حلقة" (Episode)
+    /^.*?,\s*مجلد\s*\d+:\s*/i,            // Arabic: "مجلد" (Volume)
+    /^.*?,\s*جزء\s*\d+:\s*/i,             // Arabic: "جزء" (Part)
+
+    // Finland
+    /^.*?,\s*Jakso\s*\d+:\s*/i,           // Finnish: "Jakso" (Episode)
+    /^.*?,\s*Volyymi\s*\d+:\s*/i,         // Finnish: "Volyymi" (Volume)
+    /^.*?,\s*Osa\s*\d+:\s*/i,             // Finnish: "Osa" (Part)
+
+    // France
+    /^.*?,\s*Épisode\s*\d+:\s*/i,         // French: "Épisode" (Episode)
+    /^.*?,\s*Tome\s*\d+:\s*/i,            // French: "Tome" (Volume)
+    /^.*?,\s*Partie\s*\d+:\s*/i,          // French: "Partie" (Part)
+
+    // Indonesia
+    /^.*?,\s*Episode\s*\d+:\s*/i,         // Indonesian: "Episode"
+    /^.*?,\s*Bagian\s*\d+:\s*/i,          // Indonesian: "Bagian" (Part)
+
+    // Israel
+    /^.*?,\s*פרק\s*\d+:\s*/i,             // Hebrew: "פרק" (Chapter)
+    /^.*?,\s*כרך\s*\d+:\s*/i,             // Hebrew: "כרך" (Volume)
+    /^.*?,\s*חלק\s*\d+:\s*/i,             // Hebrew: "חלק" (Part)
+
+    // India
+    /^.*?,\s*कड़ी\s*\d+:\s*/i,             // Hindi: "कड़ी" (Episode)
+    /^.*?,\s*खण्ड\s*\d+:\s*/i,            // Hindi: "खण्ड" (Volume)
+    /^.*?,\s*भाग\s*\d+:\s*/i,             // Hindi: "भाग" (Part)
+
+    // Iceland
+    /^.*?,\s*Þáttur\s*\d+:\s*/i,          // Icelandic: "Þáttur" (Episode)
+    /^.*?,\s*Bindi\s*\d+:\s*/i,           // Icelandic: "Bindi" (Volume)
+    /^.*?,\s*Hluti\s*\d+:\s*/i,           // Icelandic: "Hluti" (Part)
+
+    // Poland
+    /^.*?,\s*Odcinek\s*\d+:\s*/i,         // Polish: "Odcinek" (Episode)
+    /^.*?,\s*Tom\s*\d+:\s*/i,             // Polish: "Tom" (Volume)
+    /^.*?,\s*Część\s*\d+:\s*/i,           // Polish: "Część" (Part)
+
+    // Sweden
+    /^.*?,\s*Avsnitt\s*\d+:\s*/i,         // Swedish: "Avsnitt" (Episode)
+];
+
+// Additional German patterns for special cases
+const germanPatterns = [
+    /^.*?,\s*Folge\s*\d+:\s*/i,           // "Folge" (Episode)
+    /^.*?,\s*Band\s*\d+:\s*/i,            // "Band" (Volume)
+    /^.*?\s+-\s+\d+:\s*/i,                // Title - 1: format
+    /^.*?\s+\d+:\s*/i,                    // Title 1: format
+    /^.*?,\s*Teil\s*\d+:\s*/i,            // "Teil" (Part)
+    /^.*?,\s*Volume\s*\d+:\s*/i,          // "Volume"
+    /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,    // (Unabridged/Abridged)
+    /,\s*Teil\s+\d+$/i,                   // ", Teil X" at end
+    /-\s*.*?(?:Reihe|Serie)\s+\d+$/i      // "- Serie X" at end
+];
+
+// Unabridged/Abridged markers across all supported languages
+const abridgedPatterns = [
+    /\s*\((Unabridged|Abridged)\)\s*$/i,           // English
+    /\s*\((Oavkortad|Förkortad)\)\s*$/i,           // Swedish
+    /\s*\((Uforkortet|Forkortet)\)\s*$/i,          // Danish/Norwegian
+    /\s*\((Lyhentämätön|Lyhennetty)\)\s*$/i,       // Finnish
+    /\s*\((Óstytt|Stytt)\)\s*$/i,                  // Icelandic
+    /\s*\((Sin abreviar|Abreviado)\)\s*$/i,        // Spanish
+    /\s*\((Intégral|Abrégé)\)\s*$/i,               // French
+    /\s*\((Integrale|Ridotto)\)\s*$/i,             // Italian
+    /\s*\((Vollständig|Gekürzte Fassung)\)\s*$/i,  // German alternative
+    /\s*\((Pełna|Skrócona)\)\s*$/i,                // Polish
+    /\s*\((Integral|Resumido)\)\s*$/i,             // Portuguese
+    /\s*\((Несъкратено|Съкратено)\)\s*$/i,         // Bulgarian
+    /\s*\((Kısaltılmamış|Kısaltılmış)\)\s*$/i,     // Turkish
+    /\s*\((Полная версия|Сокращённая)\)\s*$/i,     // Russian
+    /\s*\((كامل|مختصر)\)\s*$/i,                    // Arabic
+];
+
+const TITLE_CLEANUP_PATTERNS = [...seriesPatterns, ...germanPatterns, ...abridgedPatterns];
+
+// ReDoS-Audit (DATA-01): Langer Alternations-Regex, aber jede Alternative ist KEYWORD\s*\d+
+// — lineares Matching, kein verschachtelter Quantifier, kein katastrophales Backtracking.
+// Matches titles that are only a number (incl. decimal like 22.1) or a generic episode/part/volume label
+const GENERIC_LABEL_PATTERN = /^(\d+[\d.]*|Episode\s*\d+|Folge\s*\d+|Band\s*\d+|Teil\s*\d+|Volume\s*\d+|Aflevering\s*\d+|Deel\s*\d+|Episódio\s*\d+|Parte\s*\d+|Episodio\s*\d+|Volumen\s*\d+|Afsnit\s*\d+|Bind\s*\d+|Del\s*\d+|Jakso\s*\d+|Volyymi\s*\d+|Osa\s*\d+|Épisode\s*\d+|Tome\s*\d+|Partie\s*\d+|Bagian\s*\d+|Avsnitt\s*\d+|Odcinek\s*\d+|Tom\s*\d+|Część\s*\d+|Þáttur\s*\d+|Bindi\s*\d+|Hluti\s*\d+|епизод\s*\d+|том\s*\d+|част\s*\d+|حلقة\s*\d+|مجلد\s*\d+|جزء\s*\d+|פרק\s*\d+|כרך\s*\d+|חלק\s*\d+|कड़ी\s*\d+|खण्ड\s*\d+|भाग\s*\d+)$/i;
+
 class StorytelProvider {
     constructor() {
         this.baseSearchUrl = 'https://www.storytel.com/api/search.action';
         this.locale = 'en';
-    }
-
-    /**
-     * Sets the locale for the provider
-     * @param locale {string} The locale to set
-     */
-    setLocale(locale) {
-        this.locale = locale;
     }
 
     /**
@@ -85,7 +204,8 @@ class StorytelProvider {
      */
     upgradeCoverUrl(url) {
         if (!url) return undefined;
-        return `https://storytel.com${url.replace(/\d{3}x\d{3}/, '1200x1200')}`;
+        // www host avoids an extra 301 redirect (storytel.com → www.storytel.com)
+        return `https://www.storytel.com${url.replace(/\d{3}x\d{3}/, '1200x1200')}`;
     }
 
     /**
@@ -200,115 +320,9 @@ class StorytelProvider {
         let title = book.name;
         let subtitle = null;
 
-        // ReDoS-Audit (DATA-01): Alle Patterns verwenden ^.*? mit fixem Literal-Suffix.
-        // Bei replace() scannt die Engine linear — kein exponentielles Backtracking.
-        // Geprüft: safe für alle pattern-Gruppen (patterns, germanPatterns, abridgedPatterns).
-
-        // These patterns match various series and volume indicators across different languages
-        // Current Patterns for all Storytel regions
-        const patterns = [
-
-            // Belgium / Netherlands
-            /^.*?,\s*Aflevering\s*\d+:\s*/i,      // Dutch: "Aflevering" (Episode)
-            /^.*?,\s*Deel\s*\d+:\s*/i,            // Dutch: "Deel" (Part)
-
-            // Brazil
-            /^.*?,\s*Episódio\s*\d+:\s*/i,        // Portuguese: "Episódio" (Episode)
-            /^.*?,\s*Parte\s*\d+:\s*/i,           // Portuguese: "Parte" (Part)
-
-            // Bulgaria
-            /^.*?,\s*епизод\s*\d+:\s*/i,          // Bulgarian: "епизод" (Episode)
-            /^.*?,\s*том\s*\d+:\s*/i,             // Bulgarian: "том" (Volume)
-            /^.*?,\s*част\s*\d+:\s*/i,            // Bulgarian: "част" (Part)
-
-            // Colombia / Spain
-            /^.*?,\s*Episodio\s*\d+:\s*/i,        // Spanish: "Episodio" (Episode)
-            /^.*?,\s*Volumen\s*\d+:\s*/i,         // Spanish: "Volumen" (Volume)
-
-            // Denmark
-            /^.*?,\s*Afsnit\s*\d+:\s*/i,          // Danish: "Afsnit" (Episode)
-            /^.*?,\s*Bind\s*\d+:\s*/i,            // Danish: "Bind" (Volume)
-            /^.*?,\s*Del\s*\d+:\s*/i,             // Danish: "Del" (Part)
-
-            // Egypt / Saudi Arabia / United Arab Emirates
-            /^.*?,\s*حلقة\s*\d+:\s*/i,            // Arabic: "حلقة" (Episode)
-            /^.*?,\s*مجلد\s*\d+:\s*/i,            // Arabic: "مجلد" (Volume)
-            /^.*?,\s*جزء\s*\d+:\s*/i,             // Arabic: "جزء" (Part)
-
-            // Finland
-            /^.*?,\s*Jakso\s*\d+:\s*/i,           // Finnish: "Jakso" (Episode)
-            /^.*?,\s*Volyymi\s*\d+:\s*/i,         // Finnish: "Volyymi" (Volume)
-            /^.*?,\s*Osa\s*\d+:\s*/i,             // Finnish: "Osa" (Part)
-
-            // France
-            /^.*?,\s*Épisode\s*\d+:\s*/i,         // French: "Épisode" (Episode)
-            /^.*?,\s*Tome\s*\d+:\s*/i,            // French: "Tome" (Volume)
-            /^.*?,\s*Partie\s*\d+:\s*/i,          // French: "Partie" (Part)
-
-            // Indonesia
-            /^.*?,\s*Episode\s*\d+:\s*/i,         // Indonesian: "Episode"
-            /^.*?,\s*Bagian\s*\d+:\s*/i,          // Indonesian: "Bagian" (Part)
-
-            // Israel
-            /^.*?,\s*פרק\s*\d+:\s*/i,             // Hebrew: "פרק" (Chapter)
-            /^.*?,\s*כרך\s*\d+:\s*/i,             // Hebrew: "כרך" (Volume)
-            /^.*?,\s*חלק\s*\d+:\s*/i,             // Hebrew: "חלק" (Part)
-
-            // India
-            /^.*?,\s*कड़ी\s*\d+:\s*/i,             // Hindi: "कड़ी" (Episode)
-            /^.*?,\s*खण्ड\s*\d+:\s*/i,            // Hindi: "खण्ड" (Volume)
-            /^.*?,\s*भाग\s*\d+:\s*/i,             // Hindi: "भाग" (Part)
-
-            // Iceland
-            /^.*?,\s*Þáttur\s*\d+:\s*/i,          // Icelandic: "Þáttur" (Episode)
-            /^.*?,\s*Bindi\s*\d+:\s*/i,           // Icelandic: "Bindi" (Volume)
-            /^.*?,\s*Hluti\s*\d+:\s*/i,           // Icelandic: "Hluti" (Part)
-
-            // Poland
-            /^.*?,\s*Odcinek\s*\d+:\s*/i,         // Polish: "Odcinek" (Episode)
-            /^.*?,\s*Tom\s*\d+:\s*/i,             // Polish: "Tom" (Volume)
-            /^.*?,\s*Część\s*\d+:\s*/i,           // Polish: "Część" (Part)
-
-            // Sweden
-            /^.*?,\s*Avsnitt\s*\d+:\s*/i,         // Swedish: "Avsnitt" (Episode)
-        ];
-
-        // Additional German patterns for special cases
-        const germanPatterns = [
-            /^.*?,\s*Folge\s*\d+:\s*/i,           // "Folge" (Episode)
-            /^.*?,\s*Band\s*\d+:\s*/i,            // "Band" (Volume)
-            /^.*?\s+-\s+\d+:\s*/i,                // Title - 1: format
-            /^.*?\s+\d+:\s*/i,                    // Title 1: format
-            /^.*?,\s*Teil\s*\d+:\s*/i,            // "Teil" (Part)
-            /^.*?,\s*Volume\s*\d+:\s*/i,          // "Volume"
-            /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,    // (Unabridged/Abridged)
-            /,\s*Teil\s+\d+$/i,                   // ", Teil X" at end
-            /-\s*.*?(?:Reihe|Serie)\s+\d+$/i      // "- Serie X" at end
-        ];
-
-        // Unabridged/Abridged markers across all supported languages
-        const abridgedPatterns = [
-            /\s*\((Unabridged|Abridged)\)\s*$/i,           // English
-            /\s*\((Oavkortad|Förkortad)\)\s*$/i,           // Swedish
-            /\s*\((Uforkortet|Forkortet)\)\s*$/i,          // Danish/Norwegian
-            /\s*\((Lyhentämätön|Lyhennetty)\)\s*$/i,       // Finnish
-            /\s*\((Óstytt|Stytt)\)\s*$/i,                  // Icelandic
-            /\s*\((Sin abreviar|Abreviado)\)\s*$/i,        // Spanish
-            /\s*\((Intégral|Abrégé)\)\s*$/i,               // French
-            /\s*\((Integrale|Ridotto)\)\s*$/i,             // Italian
-            /\s*\((Vollständig|Gekürzte Fassung)\)\s*$/i,  // German alternative
-            /\s*\((Pełna|Skrócona)\)\s*$/i,                // Polish
-            /\s*\((Integral|Resumido)\)\s*$/i,             // Portuguese
-            /\s*\((Несъкратено|Съкратено)\)\s*$/i,         // Bulgarian
-            /\s*\((Kısaltılmamış|Kısaltılmış)\)\s*$/i,     // Turkish
-            /\s*\((Полная версия|Сокращённая)\)\s*$/i,     // Russian
-            /\s*\((كامل|مختصر)\)\s*$/i,                    // Arabic
-        ];
-
-        const allPatterns = [...patterns, ...germanPatterns, ...abridgedPatterns];
 
         // Clean up the title by removing all pattern matches
-        allPatterns.forEach(pattern => {
+        TITLE_CLEANUP_PATTERNS.forEach(pattern => {
             title = title.replace(pattern, '');
         });
 
@@ -361,16 +375,14 @@ class StorytelProvider {
             }
         }
 
-        // ReDoS-Audit (DATA-01): Langer Alternations-Regex, aber jede Alternative ist KEYWORD\s*\d+
-        // — lineares Matching, kein verschachtelter Quantifier, kein katastrophales Backtracking.
         // If title is only a number (incl. decimal like 22.1) or a generic episode/part/volume label, swap with subtitle
-        if (/^(\d+[\d.]*|Episode\s*\d+|Folge\s*\d+|Band\s*\d+|Teil\s*\d+|Volume\s*\d+|Aflevering\s*\d+|Deel\s*\d+|Episódio\s*\d+|Parte\s*\d+|Episodio\s*\d+|Volumen\s*\d+|Afsnit\s*\d+|Bind\s*\d+|Del\s*\d+|Jakso\s*\d+|Volyymi\s*\d+|Osa\s*\d+|Épisode\s*\d+|Tome\s*\d+|Partie\s*\d+|Bagian\s*\d+|Avsnitt\s*\d+|Odcinek\s*\d+|Tom\s*\d+|Część\s*\d+|Þáttur\s*\d+|Bindi\s*\d+|Hluti\s*\d+|епизод\s*\d+|том\s*\d+|част\s*\d+|حلقة\s*\d+|مجلد\s*\d+|جزء\s*\d+|פרק\s*\d+|כרך\s*\d+|חלק\s*\d+|कड़ी\s*\d+|खण्ड\s*\d+|भाग\s*\d+)$/i.test(title.trim()) && subtitle) {
+        if (GENERIC_LABEL_PATTERN.test(title.trim()) && subtitle) {
             title = subtitle;
             subtitle = undefined;
         }
 
         // Final cleanup of title
-        allPatterns.forEach(pattern => {
+        TITLE_CLEANUP_PATTERNS.forEach(pattern => {
             title = title.replace(pattern, '');
         });
 
@@ -422,120 +434,182 @@ class StorytelProvider {
             abridged: book.abridged === 1 ? true : undefined
         };
 
-        // Remove undefined values
+        // Remove undefined/null values
         Object.keys(metadata).forEach(key =>
-            metadata[key] === undefined && delete metadata[key]
+            (metadata[key] === undefined || metadata[key] === null) && delete metadata[key]
         );
 
         return metadata;
     }
 
     /**
-     * Searches for books in the Storytel API
-     * @param query {string} Search query
-     * @param author {string} Optional author filter
-     * @param locale {string} Locale for the search
-     * @param type {string} Type filter: 'audiobook', 'ebook', or 'all'
-     * @param limit {number} Max results (1-10, default 5)
-     * @returns {Promise<{matches: *[]}>}
+     * Fetches raw search results from the Storytel API
+     * @param formattedQuery {string} Query with spaces replaced by '+'
+     * @param locale {string} Storytel region/locale
+     * @returns {Promise<object>}
+     * @throws {StorytelApiError} on network errors, timeouts, non-2xx status or malformed payload
      */
     async fetchFromApi(formattedQuery, locale) {
         const url = `${this.baseSearchUrl}?request_locale=${encodeURIComponent(locale)}&q=${encodeURIComponent(formattedQuery)}`;
 
-        const response = await axios.get(url, {
-            timeout: AXIOS_TIMEOUT_MS,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-                'Accept-Language': 'en-US,en;q=0.9'
+        let response;
+        // Storytel occasionally answers with a transient HTTP 5xx — retry once on 5xx/network errors
+        for (let attempt = 1; ; attempt++) {
+            try {
+                response = await axios.get(url, {
+                    timeout: AXIOS_TIMEOUT_MS,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                        'Accept': 'application/json',
+                        'Accept-Language': 'en-US,en;q=0.9'
+                    }
+                });
+                break;
+            } catch (err) {
+                const status = err.response?.status;
+                const retryable = !status || status >= 500;
+                if (retryable && attempt < 2) {
+                    logger.warn({ err: err.message, status, query: formattedQuery }, 'Storytel request failed — retrying once');
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    continue;
+                }
+                throw new StorytelApiError(status ? `Storytel responded with HTTP ${status}` : err.message, err);
             }
-        });
+        }
+
+        if (!response.data || typeof response.data !== 'object' || !Array.isArray(response.data.books)) {
+            throw new StorytelApiError('Storytel returned an unexpected response format');
+        }
 
         return response.data;
     }
 
-    async searchBooks(query, author = '', locale, type = 'all', limit = DEFAULT_LIMIT) {
+    /**
+     * Searches for books in the Storytel API
+     * @param query {string} Search query
+     * @param author {string} Optional author, appended to the query and used for relevance sorting
+     * @param locale {string} Locale for the search
+     * @param type {string} Type filter: 'audiobook', 'ebook', or 'all'
+     * @param limit {number} Max results (1-MAX_LIMIT, default DEFAULT_LIMIT)
+     * @param isbn {string} Optional ISBN; exact ISBN hits are ranked first
+     * @returns {Promise<{matches: *[]}>}
+     * @throws {StorytelApiError} when Storytel is unreachable
+     */
+    async searchBooks(query, author = '', locale, type = 'all', limit = DEFAULT_LIMIT, isbn = '') {
         const cleanQuery = query.split(':')[0].trim();
         const searchQuery = author ? `${cleanQuery} ${author}` : cleanQuery;
         const formattedQuery = searchQuery.replace(/\s+/g, '+');
-        const maxResults = Math.min(Math.max(limit, 1), MAX_LIMIT);
+        const maxResults = Math.min(Math.max(Number.isFinite(limit) ? limit : DEFAULT_LIMIT, 1), MAX_LIMIT);
 
-        const cacheKey = `${formattedQuery}-${locale}-${type}`;
+        // Limit is not part of the key — the full match list is cached and sliced per request
+        const cacheKey = `${CACHE_KEY_PREFIX}${formattedQuery}-${locale}-${type}${isbn ? `-isbn:${isbn}` : ''}`;
+
+        const sliceResult = result => ({ ...result, matches: result.matches.slice(0, maxResults) });
 
         // Check persistent cache
         if (getCache) {
             try {
-                const cached = getCache.get(cacheKey);
+                const cached = getCache.get(cacheKey, Date.now() - CACHE_EVICTION_DAYS * 24 * 60 * 60 * 1000);
                 if (cached) {
                     logger.debug({ key: cacheKey }, 'cache hit');
-                    return JSON.parse(cached.response);
+                    return sliceResult(JSON.parse(cached.response));
                 }
             } catch (err) {
                 logger.warn({ err: err.message, key: cacheKey }, 'cache read failed — fetching from API');
             }
         }
 
-        // PERF-03: Return existing promise if same query is already in-flight
-        if (inFlight.has(cacheKey)) {
+        // PERF-03: Reuse existing promise if same query is already in-flight
+        if (!inFlight.has(cacheKey)) {
+            const apiCallPromise = this.fetchMatches(cleanQuery, formattedQuery, author, locale, type, isbn, cacheKey)
+                .finally(() => inFlight.delete(cacheKey));
+            inFlight.set(cacheKey, apiCallPromise);
+        } else {
             logger.debug({ key: cacheKey }, 'deduplication hit — reusing in-flight request');
-            return inFlight.get(cacheKey);
         }
 
-        const apiCallPromise = (async () => {
-            try {
-                let searchData = await this.fetchFromApi(formattedQuery, locale);
-                let books = searchData?.books || [];
-                logger.info({ count: books.length, query: formattedQuery }, 'search results received');
+        return sliceResult(await inFlight.get(cacheKey));
+    }
 
-                // Retry without author if combined search found nothing
-                if (books.length === 0 && author) {
-                    const queryOnly = cleanQuery.replace(/\s+/g, '+');
-                    logger.info({ query: queryOnly }, 'retrying without author');
-                    searchData = await this.fetchFromApi(queryOnly, locale);
-                    books = searchData?.books || [];
-                    logger.info({ count: books.length }, 'retry results received');
-                }
+    /**
+     * Looks up an ISBN and puts exact hits in front of the regular results.
+     * Failures are logged and ignored — the ISBN lookup is only a ranking aid.
+     * @returns {Promise<object[]>}
+     */
+    async prependIsbnHits(books, isbn, locale) {
+        try {
+            const isbnData = await this.fetchFromApi(isbn, locale);
+            const isbnBooks = isbnData.books.filter(b =>
+                b.abook?.isbn === isbn || b.ebook?.isbn === isbn
+            );
+            logger.info({ count: isbnBooks.length, isbn }, 'isbn results received');
+            const seen = new Set(isbnBooks.map(b => b.book?.id));
+            return [...isbnBooks, ...books.filter(b => !seen.has(b.book?.id))];
+        } catch (err) {
+            logger.warn({ err: err.message, isbn }, 'isbn lookup failed — using regular results');
+            return books;
+        }
+    }
 
-                let matches = [];
-                for (const book of books) {
-                    if (!book.book || !book.book.id) continue;
-                    const metadata = this.formatBookMetadata({ slb: book }, type);
-                    if (metadata) {
-                        matches.push(metadata);
-                    }
-                }
+    /**
+     * Fetches, formats, ranks and caches all matches for a search (unlimited)
+     * @returns {Promise<{matches: *[]}>}
+     */
+    async fetchMatches(cleanQuery, formattedQuery, author, locale, type, isbn, cacheKey) {
+        let books;
+        try {
+            let searchData = await this.fetchFromApi(formattedQuery, locale);
+            books = searchData.books;
+            logger.info({ count: books.length, query: formattedQuery }, 'search results received');
 
-                // Sort by author relevance if author was provided, then limit
-                if (author) {
-                    matches.sort((a, b) =>
-                        this.authorMatchScore(b.author, author) - this.authorMatchScore(a.author, author)
-                    );
-                }
-                matches = matches.slice(0, maxResults);
-
-                const result = { matches };
-
-                // Only cache non-empty results
-                if (matches.length > 0 && setCache) {
-                    try {
-                        setCache.run(cacheKey, JSON.stringify(result), Date.now());
-                        logger.debug({ key: cacheKey }, 'cache write');
-                    } catch (err) {
-                        logger.warn({ err: err.message, key: cacheKey }, 'cache write failed');
-                    }
-                }
-
-                return result;
-            } catch (error) {
-                logger.error({ err: error.message, query: formattedQuery }, 'Storytel API request failed');
-                return { matches: [] };
-            } finally {
-                inFlight.delete(cacheKey);
+            // Retry without author if combined search found nothing
+            if (books.length === 0 && author) {
+                const queryOnly = cleanQuery.replace(/\s+/g, '+');
+                logger.info({ query: queryOnly }, 'retrying without author');
+                searchData = await this.fetchFromApi(queryOnly, locale);
+                books = searchData.books;
+                logger.info({ count: books.length }, 'retry results received');
             }
-        })();
 
-        inFlight.set(cacheKey, apiCallPromise);
-        return apiCallPromise;
+            // Exact ISBN hits (sent by Audiobookshelf when the item has one) go first
+            if (isbn) {
+                books = await this.prependIsbnHits(books, isbn, locale);
+            }
+        } catch (error) {
+            logger.error({ err: error.message, query: formattedQuery }, 'Storytel API request failed');
+            throw error;
+        }
+
+        const isbnHits = new Set();
+        let matches = [];
+        for (const book of books) {
+            if (!book.book || !book.book.id) continue;
+            const metadata = this.formatBookMetadata({ slb: book }, type);
+            if (metadata) {
+                if (isbn && metadata.isbn === isbn) isbnHits.add(metadata);
+                matches.push(metadata);
+            }
+        }
+
+        // Sort by author relevance if author was provided (stable sort keeps ISBN hits first)
+        if (author) {
+            const score = m => (isbnHits.has(m) ? 2 : 0) + this.authorMatchScore(m.author, author);
+            matches.sort((a, b) => score(b) - score(a));
+        }
+
+        const result = { matches };
+
+        // Only cache non-empty results
+        if (matches.length > 0 && setCache) {
+            try {
+                setCache.run(cacheKey, JSON.stringify(result), Date.now());
+                logger.debug({ key: cacheKey }, 'cache write');
+            } catch (err) {
+                logger.warn({ err: err.message, key: cacheKey }, 'cache write failed');
+            }
+        }
+
+        return result;
     }
 
 }
@@ -568,4 +642,4 @@ function closeDb() {
     }
 }
 
-module.exports = { StorytelProvider, getDbStatus, closeDb };
+module.exports = { StorytelProvider, StorytelApiError, getDbStatus, closeDb };
