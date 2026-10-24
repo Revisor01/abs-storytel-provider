@@ -12,7 +12,7 @@
     "axios": "^1.20.0",
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
-    "express": "^4.22.3",
+    "express": "^5.3.0",
     "pino": "^10.4.0"
   },
   "devDependencies": {
