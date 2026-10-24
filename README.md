@@ -2,19 +2,20 @@
 A metadata provider that fetches book information from Storytel's API.
 
 ## Features
-- High-resolution cover images (1200x1200)
+- Highest-resolution cover images Storytel serves (640x640)
 - Smart title and series handling with subtitle extraction
 - Multi-region support (20+ languages)
 - Separate audiobook and e-book endpoints with proper type filtering
 - Audiobook-specific metadata (narrator, duration, publisher, ISBN)
 - Author relevance ranking when author is provided
 - Automatic retry without author when combined search finds no results
+- ISBN-aware ranking: exact ISBN hits (sent by Audiobookshelf) are listed first
 - Multi-series support
 - Tags extraction
 - HTML cleanup in descriptions
 - Abridged/Unabridged marker removal in 15 languages
 - Persistent SQLite cache to minimize API calls
-- Configurable result limit (1–50, default: 20)
+- Configurable result limit (1–50, default: 5)
 
 ## Installation
 
@@ -112,7 +113,10 @@ A metadata provider that fetches book information from Storytel's API.
 
 Optional parameters:
 - `&author=...` — Improves search relevance and ranks results by author match
-- `&limit=N` — Maximum number of results (1–50, default: 20)
+- `&limit=N` — Maximum number of results (1–50, default: 5)
+- `&isbn=...` — Ranks the exact ISBN match first (Audiobookshelf sends this automatically)
+
+If Storytel is unreachable or returns an error, the provider answers with HTTP 503 instead of an empty result, so outages are visible in the Audiobookshelf logs.
 
 ## Region Support
 
@@ -166,7 +170,7 @@ If you configure the provider in Audiobookshelf with authentication, enter the s
 - Removes series name from title to avoid duplication
 
 ### Cover Images
-- Upgraded to 1200x1200 resolution
+- Requested at 1200x1200; Storytel's CDN currently delivers at most 640x640
 - Uses e-book-specific covers when searching for e-books
 
 ### Description
@@ -179,7 +183,29 @@ Search results are stored in a **persistent SQLite database** (`data/cache.db`).
 
 - Empty results (e.g. from timeouts or API errors) are **never cached**
 - Stale empty cache entries from older versions are automatically purged on startup
-- The cache has no expiration. To clear it, delete `data/cache.db` and restart the container.
+- Entries older than `CACHE_EVICTION_DAYS` (default: 30) are ignored and removed on startup. To clear the cache manually, delete `data/cache.db` and restart the container.
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | HTTP port |
+| `AUTH` | – | Optional token, see [Authentication](#authentication-optional) |
+| `ALLOWED_ORIGINS` | – | Comma-separated CORS origins (all origins allowed if unset) |
+| `AXIOS_TIMEOUT_MS` | `5000` | Timeout per Storytel request (Audiobookshelf itself gives up after 10s) |
+| `DEFAULT_LIMIT` | `5` | Results returned when no `limit` is given |
+| `MAX_LIMIT` | `50` | Upper bound for `limit` |
+| `CACHE_DB` | `data/cache.db` | Path of the SQLite cache |
+| `CACHE_EVICTION_DAYS` | `30` | Maximum age of cache entries |
+| `LOG_LEVEL` | `info` | pino log level (`debug` shows cache hits) |
+
+## Development
+
+```bash
+npm install
+npm run dev    # auto-reload
+npm test       # live tests against the Storytel API
+```
 
 ## Known Limitations
 - Search results depend on Storytel API availability

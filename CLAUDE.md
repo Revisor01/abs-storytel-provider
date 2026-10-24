@@ -23,7 +23,10 @@ npm start
 docker-compose up -d
 ```
 
-**No testing framework is currently configured** - tests would need to be set up if needed.
+**Run tests (live against the Storytel API, no mocks):**
+```bash
+npm test
+```
 
 ## Architecture
 
@@ -39,13 +42,13 @@ docker-compose up -d
 - Metadata processing and cleanup with extensive regex patterns
 - Multi-language title/series processing (20+ language patterns)
 - Cover image URL enhancement (upgrades to 640x640 resolution)
-- 10-minute TTL caching via node-cache
+- Persistent SQLite cache (better-sqlite3), entries expire after `CACHE_EVICTION_DAYS`
 
 ### Key Features
 
 **Authentication**: Optional via `AUTH` environment variable, checked in `checkAuth` middleware
 **Input Validation**: Region and query parameter validation in middleware
-**Caching**: 10-minute cache to reduce API calls to Storytel
+**Caching**: Persistent SQLite cache to reduce API calls to Storytel (avoids 403 rate limiting)
 **Internationalization**: Extensive regex patterns for title cleanup across multiple languages/regions
 **Smart Processing**: 
 - Removes series information from titles and extracts to separate field
@@ -70,9 +73,9 @@ docker-compose up -d
 
 - No linting or type checking commands are currently configured
 - The provider has extensive language-specific title processing regex patterns
-- Cover images are automatically upgraded from 320x320 to 640x640 resolution
+- Cover images are requested at 1200x1200 (Storytel's CDN delivers at most 640x640)
 - Series information is intelligently extracted and formatted as "Series Name, Number"
-- Maximum 5 results per search as per Storytel API limitations
+- Default 5 results per search (`DEFAULT_LIMIT`), Storytel itself returns up to ~100
 
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
@@ -272,8 +275,7 @@ A Node.js REST API that serves as metadata provider for Audiobookshelf, bridging
 ## Error Handling
 - Invalid region/query: Return 400 JSON error before API call
 - Missing authentication: Return 401 JSON error
-- API timeouts: Catch axios timeout (30 second limit), log error, return empty matches array
-- API errors: Return empty matches array `{ matches: [] }` instead of error response
+- API timeouts/errors: one retry on 5xx/network errors, then `StorytelApiError` → HTTP 503 (axios timeout `AXIOS_TIMEOUT_MS`, default 5s; ABS aborts after 10s)
 - Cache errors: Gracefully skip caching, still return results from API
 - Metadata formatting: Return null from formatBookMetadata() if no valid ebook or audiobook found for requested type
 - Request logging: All incoming requests logged with timestamp, method, URL, and query params (line 30-33)
@@ -289,13 +291,13 @@ A Node.js REST API that serves as metadata provider for Audiobookshelf, bridging
 - If AUTH env var set: Requires Authorization header matching exact value
 - If AUTH not set: No authentication required
 - Checked in checkAuth middleware before route execution
-- TTL: 10 minutes via application logic (cache never expires in SQLite, only in memory via node-cache if used)
-- Key: Deterministic based on query, locale, and type
+- TTL: `CACHE_EVICTION_DAYS` (default 30), enforced on read and evicted on startup
+- Key: `v2:` prefix + query, locale, type (+ isbn); full match list cached, limit applied per request
 - Non-empty requirement: Only cache results with at least 1 match
 - Persistent: SQLite database survives server restarts
 - Manual cleanup: Empty result sets cleaned on startup
 - Original: Storytel serves images at 320x320 or 1200x1200
-- Processed: Upgraded to 1200x1200 resolution for higher quality
+- Processed: 1200x1200 requested on www.storytel.com (CDN caps at 640x640)
 - Method: Regex replace of dimension pattern in URL
 - Extraction: Series name taken from book.series[0].name
 - Subtitle generation: Formatted as "Series Name Number"
