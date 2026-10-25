@@ -1,0 +1,21 @@
+name: Vorschlag
+description: Eine Idee für eine neue Funktion oder eine Verbesserung.
+labels: ["vorschlag"]
+body:
+  - type: textarea
+    id: anliegen
+    attributes:
+      label: Anliegen
+      description: Was möchtest du erreichen, und woran scheitert es heute?
+    validations:
+      required: true
+  - type: textarea
+    id: nutzen
+    attributes:
+      label: Nutzen
+      description: Wem hilft das, und in welcher Situation?
+  - type: textarea
+    id: alternativen
+    attributes:
+      label: Alternativen
+      description: Wie löst du es bisher, oder was hast du schon versucht?
