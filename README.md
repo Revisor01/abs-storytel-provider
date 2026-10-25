@@ -1,5 +1,23 @@
-# Storytel Provider for Audiobookshelf
-A metadata provider that fetches book information from Storytel's API.
+<h1 align="center">Storytel Provider for Audiobookshelf</h1>
+
+<p align="center">
+  A custom metadata provider that lets <a href="https://www.audiobookshelf.org">Audiobookshelf</a>
+  match books and audiobooks against Storytel.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js" alt="Node.js">
+  <img src="https://img.shields.io/badge/Docker-ghcr.io-2496ed?logo=docker" alt="Docker">
+  <img src="https://img.shields.io/github/license/Revisor01/abs-storytel-provider" alt="License">
+</p>
+
+## About
+
+Audiobookshelf can fetch titles, covers, series and narrators from metadata
+providers, but Storytel is not one of the built-in ones. This service sits
+between the two: Audiobookshelf asks it, it asks Storytel, cleans up the
+answer and returns it in the format Audiobookshelf expects. Results are cached
+locally, so each search reaches Storytel only once.
 
 ## Features
 - Highest-resolution cover images Storytel serves (640x640)
@@ -105,19 +123,6 @@ A metadata provider that fetches book information from Storytel's API.
 
    Example for German audiobooks: `http://abs-storytel-provider:3000/de/audiobook`
 
-## Endpoints
-
-- `/<region>/search?query=...` — Returns all available media (books and audiobooks)
-- `/<region>/book/search?query=...` — Returns only e-books
-- `/<region>/audiobook/search?query=...` — Returns only audiobooks (with narrator, duration, and stats)
-
-Optional parameters:
-- `&author=...` — Improves search relevance and ranks results by author match
-- `&limit=N` — Maximum number of results (1–50, default: 5)
-- `&isbn=...` — Ranks the exact ISBN match first (Audiobookshelf sends this automatically)
-
-If Storytel is unreachable or returns an error, the provider answers with HTTP 503 instead of an empty result, so outages are visible in the Audiobookshelf logs.
-
 ## Region Support
 
 Use any Storytel region code in the URL path:
@@ -156,36 +161,26 @@ Authorization: your-secret-key
 
 If you configure the provider in Audiobookshelf with authentication, enter the secret key in the Authorization field.
 
-## Metadata Processing
+## Versions
 
-### Title Handling
-- Removes abridged/unabridged markers in 15 languages
-- Cleans series/episode/volume markers from titles across 20+ languages
-- Extracts subtitles (splits on `:` or ` - `)
-- Swaps numeric-only titles with subtitle
+Changes are listed in [CHANGELOG.md](CHANGELOG.md), following
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each version also has
+a [release](https://github.com/Revisor01/abs-storytel-provider/releases).
 
-### Series Information
-- Extracts all series a book belongs to (multi-series support)
-- Returns series even without a sequence number
-- Removes series name from title to avoid duplication
+## Self-hosting and development
 
-### Cover Images
-- Requested at 1200x1200; Storytel's CDN currently delivers at most 640x640
-- Uses e-book-specific covers when searching for e-books
+The Docker image is the easiest way to run the provider (see Installation).
+To run it from source, Node.js 22 or newer is required:
 
-### Description
-- HTML tags stripped and entities decoded
-- Clean plaintext output
+```bash
+git clone https://github.com/Revisor01/abs-storytel-provider.git
+cd abs-storytel-provider
+npm install
+npm run dev    # auto-reload, listens on port 3000
+npm test       # live tests against the Storytel API
+```
 
-## Caching
-
-Search results are stored in a **persistent SQLite database** (`data/cache.db`). Each unique search query is only sent to Storytel once — all subsequent requests are served from the local cache. This prevents rate-limiting (403 errors) and speeds up repeated searches.
-
-- Empty results (e.g. from timeouts or API errors) are **never cached**
-- Stale empty cache entries from older versions are automatically purged on startup
-- Entries older than `CACHE_EVICTION_DAYS` (default: 30) are ignored and removed on startup. To clear the cache manually, delete `data/cache.db` and restart the container.
-
-## Environment Variables
+### Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -199,19 +194,88 @@ Search results are stored in a **persistent SQLite database** (`data/cache.db`).
 | `CACHE_EVICTION_DAYS` | `30` | Maximum age of cache entries |
 | `LOG_LEVEL` | `info` | pino log level (`debug` shows cache hits) |
 
-## Development
+### Endpoints
 
-```bash
-npm install
-npm run dev    # auto-reload
-npm test       # live tests against the Storytel API
+- `/<region>/search?query=...` — Returns all available media (books and audiobooks)
+- `/<region>/book/search?query=...` — Returns only e-books
+- `/<region>/audiobook/search?query=...` — Returns only audiobooks (with narrator, duration, and stats)
+
+Optional parameters:
+- `&author=...` — Improves search relevance and ranks results by author match
+- `&limit=N` — Maximum number of results (1–50, default: 5)
+- `&isbn=...` — Ranks the exact ISBN match first (Audiobookshelf sends this automatically)
+
+If Storytel is unreachable or returns an error, the provider answers with HTTP 503 instead of an empty result, so outages are visible in the Audiobookshelf logs.
+
+### Caching
+
+Search results are stored in a **persistent SQLite database** (`data/cache.db`). Each unique search query is only sent to Storytel once — all subsequent requests are served from the local cache. This prevents rate-limiting (403 errors) and speeds up repeated searches.
+
+- Empty results (e.g. from timeouts or API errors) are **never cached**
+- Stale empty cache entries from older versions are automatically purged on startup
+- Entries older than `CACHE_EVICTION_DAYS` (default: 30) are ignored and removed on startup. To clear the cache manually, delete `data/cache.db` and restart the container.
+
+### Metadata processing
+
+#### Title Handling
+- Removes abridged/unabridged markers in 15 languages
+- Cleans series/episode/volume markers from titles across 20+ languages
+- Extracts subtitles (splits on `:` or ` - `)
+- Swaps numeric-only titles with subtitle
+
+#### Series Information
+- Extracts all series a book belongs to (multi-series support)
+- Returns series even without a sequence number
+- Removes series name from title to avoid duplication
+
+#### Cover Images
+- Requested at 1200x1200; Storytel's CDN currently delivers at most 640x640
+- Uses e-book-specific covers when searching for e-books
+
+#### Description
+- HTML tags stripped and entities decoded
+- Clean plaintext output
+
+## Architecture
+
 ```
+abs-storytel-provider
+├── src/
+│   ├── server.js     — HTTP server, routes, authentication, CORS
+│   ├── provider.js   — Storytel search, ranking and metadata cleanup
+│   ├── config.js     — settings from environment variables
+│   └── logger.js     — structured logging
+└── test/             — live tests (node --test), run on every pull request
+```
+
+**Principles:**
+- **Outages must be visible.** If Storytel fails, the provider answers with
+  HTTP 503 instead of an empty list, and empty results are never cached.
+- **Ask Storytel as rarely as possible.** Every unique search is cached.
 
 ## Known Limitations
 - Search results depend on Storytel API availability
 - Some metadata fields might be unavailable depending on the book
 - Series information comes from Storytel and may not always match the actual series name
 
+## Contributing
+
+Bug reports and suggestions are welcome as
+[issues](https://github.com/Revisor01/abs-storytel-provider/issues). Please
+report security issues privately as described in [SECURITY.md](SECURITY.md).
+Pull requests run through the tests and a secret scan; contribution guidelines
+are in [CLAUDE.md](CLAUDE.md).
+
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
+
+## Disclaimer
+
+This is an independent project. It is not affiliated with, endorsed or
+supported by Storytel or Audiobookshelf.
+
+## Contact
+
+Simon Luthe · [mail@simonluthe.de](mailto:mail@simonluthe.de) ·
+[simonluthe.de](https://simonluthe.de)
