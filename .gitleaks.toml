@@ -1,0 +1,81 @@
+# Secret-Scan fuer dieses Repo. Ergaenzt die Standardregeln von gitleaks um
+# Zugangsdaten hinter Labels und um lokale Pfade. Weitere Muster kommen in CI
+# aus dem Repo-Secret GITLEAKS_EXTRA_RULES und stehen hier bewusst nicht.
+
+title = "secret-scan"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "label-passwort"
+description = "Passwort als Literal hinter einem Label (Code: nur in Anfuehrungszeichen)"
+regex = '''(?i)\b(?:password|passwort|kennwort|passwd|pwd)\b["'`]?\s*[:=]\s*["'`]([^\s"'`]{4,})["'`]'''
+secretGroup = 1
+keywords = ["password", "passwort", "kennwort", "passwd", "pwd"]
+
+[[rules]]
+id = "label-passwort-text"
+description = "Passwort ohne Anfuehrungszeichen in Text- und Konfigurationsdateien"
+regex = '''(?i)\b(?:password|passwort|kennwort|passwd|pwd)\b\s*[:=]\s*([^\s"'`,;)]{4,})'''
+secretGroup = 1
+path = '''(?i)\.(?:md|txt|ya?ml|env|ini|toml|conf|cfg|properties|plist)$|(?:^|/)\.env[^/]*$'''
+keywords = ["password", "passwort", "kennwort", "passwd", "pwd"]
+
+[[rules]]
+id = "label-api-key"
+description = "API-Schluessel oder Token als Literal hinter einem Label"
+regex = '''(?i)\b(?:api[ _-]?key|token|secret)\b["'`]?\s*[:=]\s*["'`]([A-Za-z0-9_\-+/=.]{12,})["'`]'''
+secretGroup = 1
+keywords = ["api", "key", "token", "secret"]
+
+[[rules]]
+id = "label-api-key-text"
+description = "API-Schluessel oder Token ohne Anfuehrungszeichen in Text- und Konfigurationsdateien"
+regex = '''(?i)\b(?:api[ _-]?key|token|secret)\b\s*[:=]\s*([A-Za-z0-9_\-+/=.]{12,})'''
+secretGroup = 1
+path = '''(?i)\.(?:md|txt|ya?ml|env|ini|toml|conf|cfg|properties|plist)$|(?:^|/)\.env[^/]*$'''
+keywords = ["api", "key", "token", "secret"]
+
+[[rules]]
+id = "lokaler-pfad"
+description = "Lokaler Pfad unter /Users/ oder ~/"
+regex = '''(?:/Users/[a-z][a-z0-9._-]+/|~/(?:Documents|Desktop|Downloads|Library|Backups|Projekte|code|\.claude|\.ssh|\.config)/)'''
+keywords = ["/users/", "~/"]
+
+[[rules]]
+id = "arbeitsnotiz"
+description = "Arbeitsnotiz oder Uebergabe im Repo"
+path = '''(?i)(?:^|/)(?:HANDOFF[^/]*\.md|UEBERGABE[^/]*\.md|CLAUDE\.local\.md|\.planning/.+|\.claude/.+|[^/]*review-notes[^/]*\.md)$'''
+
+[[rules]]
+id = "schluesseldatei"
+description = "Env-, Schluessel- oder Zertifikatsdatei im Repo"
+path = '''(?i)(?:^|/)(?:\.env(?:\.[a-z0-9]+)?|[^/]+\.env|[^/]+\.p8|[^/]+\.p12|[^/]+\.mobileprovision|[^/]+\.jks|release\.keystore|service-account[^/]*\.json)$'''
+
+[[allowlists]]
+description = "Beispieldateien, Platzhalter, Code-Bezeichner und Testdaten"
+paths = [
+  '''(?i)\.env\.(?:example|sample|template)$''',
+  '''(?i)(?:^|/)debug\.keystore$''',
+]
+regexTarget = "secret"
+regexes = [
+  '''(?i)^(?:x{3,}|\*{3,}|changeme|change-me|example|beispiel|dummy|placeholder|your[-_].*|dein[-_].*|<.*>|\$\{.*\}|\$\(.*\)|\$[A-Z_]+|process\.env.*|os\.environ.*)$''',
+  '''^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+[,;)\]]*$''',
+  '''^(?:String|Int|Bool|Data|URL|Double|Any)\??[,;)\]]*$''',
+  '''(?i)^(?:passwor[td]|kennwort|password\d?|secret|token|apikey|api_key)[,;)\]]*$''',
+]
+
+[[allowlists]]
+description = "Testdaten in Testordnern"
+targetRules = ["label-passwort", "label-api-key"]
+paths = ['''(?i)(?:^|/)(?:tests?|__tests__|spec|[A-Za-z]+Tests)/''']
+
+# Oeffentliche Domain dieses Produkts. Pro Repo anpassen oder loeschen.
+# Ohne targetRules: die Regel dafuer kommt erst in CI dazu, und eine Ausnahme
+# fuer eine fehlende Regel bricht das Laden der Konfiguration ab.
+# [[allowlists]]
+# description = "Produkt-Domain"
+# regexTarget = "match"
+# regexes = ['''(?i)^api\.example\.de$''']
