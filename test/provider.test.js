@@ -1,4 +1,4 @@
-// Live tests against the Storytel API (no mocks — see CLAUDE.md constraints)
+// Live tests against the Storytel API, without mocks: only the real responses show format changes
 const { test } = require('node:test');
 const assert = require('node:assert');
 const os = require('os');

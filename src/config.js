@@ -1,4 +1,3 @@
-// config.js
 module.exports = {
     PORT: parseInt(process.env.PORT || '3000', 10),
     AXIOS_TIMEOUT_MS: parseInt(process.env.AXIOS_TIMEOUT_MS || '5000', 10),
