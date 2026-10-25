@@ -1,4 +1,3 @@
-// server.js
 const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
@@ -10,7 +9,7 @@ const app = express();
 const port = PORT;
 const auth = process.env.AUTH;
 
-// CORS configuration (SEC-01)
+// CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS;
 if (allowedOrigins) {
     const origins = allowedOrigins.split(',').map(o => o.trim());
@@ -29,7 +28,7 @@ if (allowedOrigins) {
 
 const provider = new StorytelProvider();
 
-// Timing-safe auth comparison (SEC-02)
+// Timing-safe auth comparison
 const checkAuth = (req, res, next) => {
     if (auth) {
         const token = req.headers.authorization || '';
@@ -53,7 +52,7 @@ const validateRegion = (req, res, next) => {
     next();
 };
 
-// Query validation middleware (SEC-03)
+// Query validation middleware
 const validateQuery = (req, res, next) => {
     // Express parses repeated params (?query=a&query=b) into arrays — reject non-strings
     for (const key of ['query', 'title', 'author', 'limit', 'isbn']) {
@@ -82,7 +81,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Health endpoint (OPS-01)
+// Health endpoint
 app.get('/health', (req, res) => {
     const cacheStatus = getDbStatus();
     res.json({
@@ -158,7 +157,7 @@ const server = app.listen(port, () => {
     logger.info({ port, axiosTimeoutMs: AXIOS_TIMEOUT_MS }, 'Storytel provider listening');
 });
 
-// Graceful shutdown (OPS-02)
+// Graceful shutdown
 function shutdown(signal) {
     logger.info({ signal }, 'shutdown signal received — closing server');
     server.close(() => {

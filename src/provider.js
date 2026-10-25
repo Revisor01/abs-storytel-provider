@@ -15,7 +15,7 @@ let setCache = null;
 // v2: full (unlimited) match list, www cover host, no null fields
 const CACHE_KEY_PREFIX = 'v2:';
 
-// PERF-03: In-flight deduplication — prevents duplicate API calls for concurrent identical queries
+// In-flight deduplication — prevents duplicate API calls for concurrent identical queries
 const inFlight = new Map();
 
 // Thrown when the Storytel API is unreachable or answers with an error — mapped to HTTP 503
@@ -51,7 +51,7 @@ try {
     db.exec(`DELETE FROM search_cache WHERE response = '{"matches":[]}'`);
     db.prepare('DELETE FROM search_cache WHERE cache_key NOT LIKE ?').run(`${CACHE_KEY_PREFIX}%`);
 
-    // PERF-01: Eviction — remove entries older than CACHE_EVICTION_DAYS days
+    // Eviction — remove entries older than CACHE_EVICTION_DAYS days
     const evictionThreshold = Date.now() - CACHE_EVICTION_DAYS * 24 * 60 * 60 * 1000;
     const evicted = db.prepare('DELETE FROM search_cache WHERE created_at < ?').run(evictionThreshold);
     if (evicted.changes > 0) {
@@ -69,9 +69,8 @@ try {
     setCache = null;
 }
 
-// ReDoS-Audit (DATA-01): Alle Patterns verwenden ^.*? mit fixem Literal-Suffix.
-// Bei replace() scannt die Engine linear — kein exponentielles Backtracking.
-// Geprüft: safe für alle pattern-Gruppen (seriesPatterns, germanPatterns, abridgedPatterns).
+// Every pattern is ^.*? followed by a fixed literal, so replace() scans linearly
+// without catastrophic backtracking (checked for all three pattern groups).
 
 // These patterns match various series and volume indicators across different languages
 // Current Patterns for all Storytel regions
@@ -176,8 +175,7 @@ const abridgedPatterns = [
 
 const TITLE_CLEANUP_PATTERNS = [...seriesPatterns, ...germanPatterns, ...abridgedPatterns];
 
-// ReDoS-Audit (DATA-01): Langer Alternations-Regex, aber jede Alternative ist KEYWORD\s*\d+
-// — lineares Matching, kein verschachtelter Quantifier, kein katastrophales Backtracking.
+// Each alternative is KEYWORD\s*\d+ without nested quantifiers, so matching stays linear.
 // Matches titles that are only a number (incl. decimal like 22.1) or a generic episode/part/volume label
 const GENERIC_LABEL_PATTERN = /^(\d+[\d.]*|Episode\s*\d+|Folge\s*\d+|Band\s*\d+|Teil\s*\d+|Volume\s*\d+|Aflevering\s*\d+|Deel\s*\d+|Episódio\s*\d+|Parte\s*\d+|Episodio\s*\d+|Volumen\s*\d+|Afsnit\s*\d+|Bind\s*\d+|Del\s*\d+|Jakso\s*\d+|Volyymi\s*\d+|Osa\s*\d+|Épisode\s*\d+|Tome\s*\d+|Partie\s*\d+|Bagian\s*\d+|Avsnitt\s*\d+|Odcinek\s*\d+|Tom\s*\d+|Część\s*\d+|Þáttur\s*\d+|Bindi\s*\d+|Hluti\s*\d+|епизод\s*\d+|том\s*\d+|част\s*\d+|حلقة\s*\d+|مجلد\s*\d+|جزء\s*\d+|פרק\s*\d+|כרך\s*\d+|חלק\s*\d+|कड़ी\s*\d+|खण्ड\s*\d+|भाग\s*\d+)$/i;
 
@@ -519,7 +517,7 @@ class StorytelProvider {
             }
         }
 
-        // PERF-03: Reuse existing promise if same query is already in-flight
+        // Reuse existing promise if same query is already in-flight
         if (!inFlight.has(cacheKey)) {
             const apiCallPromise = this.fetchMatches(cleanQuery, formattedQuery, author, locale, type, isbn, cacheKey)
                 .finally(() => inFlight.delete(cacheKey));
