@@ -120,8 +120,27 @@ dist
 # Local runtime data (SQLite cache)
 data/
 
-# Claude Code local settings and agent worktrees
+# --- Arbeitsnotizen und lokale Konfiguration (gehoeren nicht ins Repo) ---
+.planning/
 .claude/
+CLAUDE.local.md
+HANDOFF*.md
+UEBERGABE*.md
+*review-notes*.md
+.playwright-mcp/
 
-# macOS
+# --- Zugangsdaten und Schluessel ---
+.env
+.env.*
+!.env.example
+*.env
+secrets*
+*.p8
+*.p12
+*.mobileprovision
+*.jks
+release.keystore
+*service-account*.json
+
+# --- System ---
 .DS_Store

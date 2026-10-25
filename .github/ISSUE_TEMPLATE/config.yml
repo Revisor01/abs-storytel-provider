@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicherheitslücke melden
+    url: https://github.com/Revisor01/abs-storytel-provider/security/advisories/new
+    about: Bitte vertraulich melden, nicht als öffentliches Issue.
