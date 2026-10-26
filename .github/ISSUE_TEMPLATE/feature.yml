@@ -1,0 +1,21 @@
+name: Suggest a feature
+description: An idea for a new feature or an improvement.
+labels: ["vorschlag"]
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: What you want to achieve
+      description: What do you want to do, and what stops you today?
+    validations:
+      required: true
+  - type: textarea
+    id: benefit
+    attributes:
+      label: Benefit
+      description: Who does this help, and in which situation?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: How do you solve it today, or what have you tried?

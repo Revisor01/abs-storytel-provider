@@ -1,0 +1,49 @@
+name: Report a bug
+description: Something does not work as expected.
+labels: ["fehler"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please do not include credentials, server
+        addresses or account names; this issue is public. Report security
+        issues as described in SECURITY.md.
+  - type: textarea
+    id: observation
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expectation
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Provider version
+      placeholder: "e.g. 2.1.0 or image tag"
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Audiobookshelf version
+      placeholder: "e.g. 2.30.0"
+  - type: input
+    id: device
+    attributes:
+      label: Region and search term
+      description: Storytel region and the title or ISBN it happens with.
+      placeholder: "e.g. de, “Der Schwarm”"

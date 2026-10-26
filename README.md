@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <b>English</b> · <a href="README.de.md">Deutsch</a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js" alt="Node.js">
   <img src="https://img.shields.io/badge/Docker-ghcr.io-2496ed?logo=docker" alt="Docker">
   <img src="https://img.shields.io/github/license/Revisor01/abs-storytel-provider" alt="License">
@@ -263,8 +267,8 @@ abs-storytel-provider
 Bug reports and suggestions are welcome as
 [issues](https://github.com/Revisor01/abs-storytel-provider/issues). Please
 report security issues privately as described in [SECURITY.md](SECURITY.md).
-Pull requests run through the tests and a secret scan; contribution guidelines
-are in [CLAUDE.md](CLAUDE.md).
+Pull requests run through the tests and a secret scan; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
