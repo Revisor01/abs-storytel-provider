@@ -54,7 +54,7 @@ description = "Env-, Schluessel- oder Zertifikatsdatei im Repo"
 path = '''(?i)(?:^|/)(?:\.env(?:\.[a-z0-9]+)?|[^/]+\.env|[^/]+\.p8|[^/]+\.p12|[^/]+\.mobileprovision|[^/]+\.jks|release\.keystore|service-account[^/]*\.json)$'''
 
 [[allowlists]]
-description = "Beispieldateien, Platzhalter, Code-Bezeichner und Testdaten"
+description = "Beispieldateien und Platzhalter"
 paths = [
   '''(?i)\.env\.(?:example|sample|template)$''',
   '''(?i)(?:^|/)debug\.keystore$''',
@@ -62,9 +62,18 @@ paths = [
 regexTarget = "secret"
 regexes = [
   '''(?i)^(?:x{3,}|\*{3,}|changeme|change-me|example|beispiel|dummy|placeholder|your[-_].*|dein[-_].*|<.*>|\$\{.*\}|\$\(.*\)|\$[A-Z_]+|process\.env.*|os\.environ.*)$''',
-  '''^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+[,;)\]]*$''',
-  '''^(?:String|Int|Bool|Data|URL|Double|Any)\??[,;)\]]*$''',
+  '''^(?:String|Int|Bool|Data|URL|Double|Any|None|null|nil|undefined)\??[,;)\]]*$''',
   '''(?i)^(?:passwor[td]|kennwort|password\d?|secret|token|apikey|api_key)[,;)\]]*$''',
+]
+
+# Nur für Regeln, die Werte hinter einem Label melden: Ohne targetRules gälte
+# die Ausnahme auch für Hostnamen (server.example.de sieht aus wie a.b.c).
+[[allowlists]]
+description = "Code-Bezeichner hinter einem Label"
+targetRules = ["label-passwort", "label-passwort-text", "label-api-key", "label-api-key-text", "generic-api-key"]
+regexTarget = "secret"
+regexes = [
+  '''^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+[,;)\]]*$''',
 ]
 
 [[allowlists]]
