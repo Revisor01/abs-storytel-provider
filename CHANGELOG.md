@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Other
+
+- The README is now also available in German; issue and pull request templates and the security and contributing notes are bilingual.
+
 ## [2.1.0] - 2026-10-24
 
 ### Fixed
