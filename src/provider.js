@@ -5,17 +5,15 @@ const fs = require('fs');
 const logger = require('./logger');
 const { AXIOS_TIMEOUT_MS, DEFAULT_LIMIT, MAX_LIMIT, CACHE_DB_PATH, CACHE_EVICTION_DAYS } = require('./config');
 
-// Persistent SQLite cache
 const dbPath = CACHE_DB_PATH;
 let db = null;
 let getCache = null;
 let setCache = null;
 
 // Bump when the cached response shape changes; entries with another prefix are dropped on startup
-// v2: full (unlimited) match list, www cover host, no null fields
 const CACHE_KEY_PREFIX = 'v2:';
 
-// In-flight deduplication — prevents duplicate API calls for concurrent identical queries
+// Concurrent identical searches share one Storytel request
 const inFlight = new Map();
 
 // Thrown when the Storytel API is unreachable or answers with an error — mapped to HTTP 503
@@ -51,7 +49,6 @@ try {
     db.exec(`DELETE FROM search_cache WHERE response = '{"matches":[]}'`);
     db.prepare('DELETE FROM search_cache WHERE cache_key NOT LIKE ?').run(`${CACHE_KEY_PREFIX}%`);
 
-    // Eviction — remove entries older than CACHE_EVICTION_DAYS days
     const evictionThreshold = Date.now() - CACHE_EVICTION_DAYS * 24 * 60 * 60 * 1000;
     const evicted = db.prepare('DELETE FROM search_cache WHERE created_at < ?').run(evictionThreshold);
     if (evicted.changes > 0) {
@@ -69,92 +66,86 @@ try {
     setCache = null;
 }
 
-// Every pattern is ^.*? followed by a fixed literal, so replace() scans linearly
-// without catastrophic backtracking (checked for all three pattern groups).
-
-// These patterns match various series and volume indicators across different languages
-// Current Patterns for all Storytel regions
+// Every pattern is ^.*? plus a fixed literal, so replace() cannot backtrack catastrophically
 const seriesPatterns = [
 
     // Belgium / Netherlands
-    /^.*?,\s*Aflevering\s*\d+:\s*/i,      // Dutch: "Aflevering" (Episode)
-    /^.*?,\s*Deel\s*\d+:\s*/i,            // Dutch: "Deel" (Part)
+    /^.*?,\s*Aflevering\s*\d+:\s*/i,
+    /^.*?,\s*Deel\s*\d+:\s*/i,
 
     // Brazil
-    /^.*?,\s*Episódio\s*\d+:\s*/i,        // Portuguese: "Episódio" (Episode)
-    /^.*?,\s*Parte\s*\d+:\s*/i,           // Portuguese: "Parte" (Part)
+    /^.*?,\s*Episódio\s*\d+:\s*/i,
+    /^.*?,\s*Parte\s*\d+:\s*/i,
 
     // Bulgaria
-    /^.*?,\s*епизод\s*\d+:\s*/i,          // Bulgarian: "епизод" (Episode)
-    /^.*?,\s*том\s*\d+:\s*/i,             // Bulgarian: "том" (Volume)
-    /^.*?,\s*част\s*\d+:\s*/i,            // Bulgarian: "част" (Part)
+    /^.*?,\s*епизод\s*\d+:\s*/i,
+    /^.*?,\s*том\s*\d+:\s*/i,
+    /^.*?,\s*част\s*\d+:\s*/i,
 
     // Colombia / Spain
-    /^.*?,\s*Episodio\s*\d+:\s*/i,        // Spanish: "Episodio" (Episode)
-    /^.*?,\s*Volumen\s*\d+:\s*/i,         // Spanish: "Volumen" (Volume)
+    /^.*?,\s*Episodio\s*\d+:\s*/i,
+    /^.*?,\s*Volumen\s*\d+:\s*/i,
 
     // Denmark
-    /^.*?,\s*Afsnit\s*\d+:\s*/i,          // Danish: "Afsnit" (Episode)
-    /^.*?,\s*Bind\s*\d+:\s*/i,            // Danish: "Bind" (Volume)
-    /^.*?,\s*Del\s*\d+:\s*/i,             // Danish: "Del" (Part)
+    /^.*?,\s*Afsnit\s*\d+:\s*/i,
+    /^.*?,\s*Bind\s*\d+:\s*/i,
+    /^.*?,\s*Del\s*\d+:\s*/i,
 
     // Egypt / Saudi Arabia / United Arab Emirates
-    /^.*?,\s*حلقة\s*\d+:\s*/i,            // Arabic: "حلقة" (Episode)
-    /^.*?,\s*مجلد\s*\d+:\s*/i,            // Arabic: "مجلد" (Volume)
-    /^.*?,\s*جزء\s*\d+:\s*/i,             // Arabic: "جزء" (Part)
+    /^.*?,\s*حلقة\s*\d+:\s*/i,
+    /^.*?,\s*مجلد\s*\d+:\s*/i,
+    /^.*?,\s*جزء\s*\d+:\s*/i,
 
     // Finland
-    /^.*?,\s*Jakso\s*\d+:\s*/i,           // Finnish: "Jakso" (Episode)
-    /^.*?,\s*Volyymi\s*\d+:\s*/i,         // Finnish: "Volyymi" (Volume)
-    /^.*?,\s*Osa\s*\d+:\s*/i,             // Finnish: "Osa" (Part)
+    /^.*?,\s*Jakso\s*\d+:\s*/i,
+    /^.*?,\s*Volyymi\s*\d+:\s*/i,
+    /^.*?,\s*Osa\s*\d+:\s*/i,
 
     // France
-    /^.*?,\s*Épisode\s*\d+:\s*/i,         // French: "Épisode" (Episode)
-    /^.*?,\s*Tome\s*\d+:\s*/i,            // French: "Tome" (Volume)
-    /^.*?,\s*Partie\s*\d+:\s*/i,          // French: "Partie" (Part)
+    /^.*?,\s*Épisode\s*\d+:\s*/i,
+    /^.*?,\s*Tome\s*\d+:\s*/i,
+    /^.*?,\s*Partie\s*\d+:\s*/i,
 
     // Indonesia
-    /^.*?,\s*Episode\s*\d+:\s*/i,         // Indonesian: "Episode"
-    /^.*?,\s*Bagian\s*\d+:\s*/i,          // Indonesian: "Bagian" (Part)
+    /^.*?,\s*Episode\s*\d+:\s*/i,
+    /^.*?,\s*Bagian\s*\d+:\s*/i,
 
     // Israel
-    /^.*?,\s*פרק\s*\d+:\s*/i,             // Hebrew: "פרק" (Chapter)
-    /^.*?,\s*כרך\s*\d+:\s*/i,             // Hebrew: "כרך" (Volume)
-    /^.*?,\s*חלק\s*\d+:\s*/i,             // Hebrew: "חלק" (Part)
+    /^.*?,\s*פרק\s*\d+:\s*/i,
+    /^.*?,\s*כרך\s*\d+:\s*/i,
+    /^.*?,\s*חלק\s*\d+:\s*/i,
 
     // India
-    /^.*?,\s*कड़ी\s*\d+:\s*/i,             // Hindi: "कड़ी" (Episode)
-    /^.*?,\s*खण्ड\s*\d+:\s*/i,            // Hindi: "खण्ड" (Volume)
-    /^.*?,\s*भाग\s*\d+:\s*/i,             // Hindi: "भाग" (Part)
+    /^.*?,\s*कड़ी\s*\d+:\s*/i,
+    /^.*?,\s*खण्ड\s*\d+:\s*/i,
+    /^.*?,\s*भाग\s*\d+:\s*/i,
 
     // Iceland
-    /^.*?,\s*Þáttur\s*\d+:\s*/i,          // Icelandic: "Þáttur" (Episode)
-    /^.*?,\s*Bindi\s*\d+:\s*/i,           // Icelandic: "Bindi" (Volume)
-    /^.*?,\s*Hluti\s*\d+:\s*/i,           // Icelandic: "Hluti" (Part)
+    /^.*?,\s*Þáttur\s*\d+:\s*/i,
+    /^.*?,\s*Bindi\s*\d+:\s*/i,
+    /^.*?,\s*Hluti\s*\d+:\s*/i,
 
     // Poland
-    /^.*?,\s*Odcinek\s*\d+:\s*/i,         // Polish: "Odcinek" (Episode)
-    /^.*?,\s*Tom\s*\d+:\s*/i,             // Polish: "Tom" (Volume)
-    /^.*?,\s*Część\s*\d+:\s*/i,           // Polish: "Część" (Part)
+    /^.*?,\s*Odcinek\s*\d+:\s*/i,
+    /^.*?,\s*Tom\s*\d+:\s*/i,
+    /^.*?,\s*Część\s*\d+:\s*/i,
 
     // Sweden
-    /^.*?,\s*Avsnitt\s*\d+:\s*/i,         // Swedish: "Avsnitt" (Episode)
+    /^.*?,\s*Avsnitt\s*\d+:\s*/i,
 ];
 
-// Additional German patterns for special cases
 const germanPatterns = [
-    /^.*?,\s*Folge\s*\d+:\s*/i,           // "Folge" (Episode)
-    /^.*?,\s*Band\s*\d+:\s*/i,            // "Band" (Volume)
-    /^.*?\s+-\s+\d+:\s*/i,                // Title - 1: format
-    /^.*?\s+\d+:\s*/i,                    // Title 1: format
-    /^.*?,\s*Teil\s*\d+:\s*/i,            // "Teil" (Part)
-    /^.*?,\s*Volume\s*\d+:\s*/i,          // "Volume"
-    /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,    // (Unabridged/Abridged)
-    /,\s*Teil\s+\d+$/i,                   // ", Teil X" at end
-    /-\s*.*?(?:Reihe|Serie)\s+\d+$/i      // "- Serie X" at end
+    /^.*?,\s*Folge\s*\d+:\s*/i,
+    /^.*?,\s*Band\s*\d+:\s*/i,
+    /^.*?\s+-\s+\d+:\s*/i,
+    /^.*?\s+\d+:\s*/i,
+    /^.*?,\s*Teil\s*\d+:\s*/i,
+    /^.*?,\s*Volume\s*\d+:\s*/i,
+    /\s*\((Ungekürzt|Gekürzt)\)\s*$/i,
+    /,\s*Teil\s+\d+$/i,
+    /-\s*.*?(?:Reihe|Serie)\s+\d+$/i
 ];
 
-// Unabridged/Abridged markers across all supported languages
 const abridgedPatterns = [
     /\s*\((Unabridged|Abridged)\)\s*$/i,           // English
     /\s*\((Oavkortad|Förkortad)\)\s*$/i,           // Swedish
@@ -175,8 +166,7 @@ const abridgedPatterns = [
 
 const TITLE_CLEANUP_PATTERNS = [...seriesPatterns, ...germanPatterns, ...abridgedPatterns];
 
-// Each alternative is KEYWORD\s*\d+ without nested quantifiers, so matching stays linear.
-// Matches titles that are only a number (incl. decimal like 22.1) or a generic episode/part/volume label
+// Each alternative is KEYWORD\s*\d+ without nested quantifiers, so matching stays linear
 const GENERIC_LABEL_PATTERN = /^(\d+[\d.]*|Episode\s*\d+|Folge\s*\d+|Band\s*\d+|Teil\s*\d+|Volume\s*\d+|Aflevering\s*\d+|Deel\s*\d+|Episódio\s*\d+|Parte\s*\d+|Episodio\s*\d+|Volumen\s*\d+|Afsnit\s*\d+|Bind\s*\d+|Del\s*\d+|Jakso\s*\d+|Volyymi\s*\d+|Osa\s*\d+|Épisode\s*\d+|Tome\s*\d+|Partie\s*\d+|Bagian\s*\d+|Avsnitt\s*\d+|Odcinek\s*\d+|Tom\s*\d+|Część\s*\d+|Þáttur\s*\d+|Bindi\s*\d+|Hluti\s*\d+|епизод\s*\d+|том\s*\d+|част\s*\d+|حلقة\s*\d+|مجلد\s*\d+|جزء\s*\d+|פרק\s*\d+|כרך\s*\d+|חלק\s*\d+|कड़ी\s*\d+|खण्ड\s*\d+|भाग\s*\d+)$/i;
 
 class StorytelProvider {
@@ -185,32 +175,17 @@ class StorytelProvider {
         this.locale = 'en';
     }
 
-    /**
-     * Ensures a value is a string and trims it. Used for cleaning up data and returns
-     * @param value
-     * @returns {string}
-     */
     ensureString(value) {
         if (value === null || value === undefined) return '';
         return String(value).trim();
     }
 
-    /**
-     * Upgrades the cover URL to a higher resolution
-     * @param url
-     * @returns {undefined|string}
-     */
     upgradeCoverUrl(url) {
         if (!url) return undefined;
         // www host avoids an extra 301 redirect (storytel.com → www.storytel.com)
         return `https://www.storytel.com${url.replace(/\d{3}x\d{3}/, '1200x1200')}`;
     }
 
-    /**
-     * Splits a genre by / or , and trims the resulting strings
-     * @param genre {string}
-     * @returns {*[]}
-     */
     splitGenre(genre) {
         if (!genre) return [];
         return genre.split(/[\/,]/).map(g => {
@@ -219,20 +194,10 @@ class StorytelProvider {
         });
     }
 
-    /**
-     * Escapes special characters in RegEx patterns
-     * @param str {string} String to escape
-     * @returns {string}
-     */
     escapeRegex(str) {
         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
-    /**
-     * Strips HTML tags and decodes common HTML entities from a string
-     * @param str {string}
-     * @returns {string}
-     */
     stripHtml(str) {
         if (!str) return '';
         let s = String(str)
@@ -256,12 +221,7 @@ class StorytelProvider {
             .trim();
     }
 
-    /**
-     * Calculates a simple author match score (0-1)
-     * @param resultAuthor {string}
-     * @param searchAuthor {string}
-     * @returns {number}
-     */
+    /** Author match score from 0 to 1. */
     authorMatchScore(resultAuthor, searchAuthor) {
         if (!searchAuthor || !resultAuthor) return 0;
         const normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s]/g, '').trim();
@@ -274,12 +234,7 @@ class StorytelProvider {
         return matchedParts.length / searchParts.length * 0.6;
     }
 
-    /**
-     * Formats the book metadata to the ABS format
-     * @param bookData
-     * @param type {string} Type filter: 'audiobook', 'ebook', or 'all'
-     * @returns {object|null}
-     */
+    /** Converts a Storytel hit to Audiobookshelf metadata, or null if it does not fit `type`. */
     formatBookMetadata(bookData, type = 'all') {
         const slb = bookData.slb;
         if (!slb || !slb.book) return null;
@@ -288,7 +243,6 @@ class StorytelProvider {
         let abook = slb.abook;
         let ebook = slb.ebook;
 
-        // Filter by type
         switch (type) {
             case 'audiobook':
                 ebook = undefined;
@@ -319,7 +273,6 @@ class StorytelProvider {
         let subtitle = null;
 
 
-        // Clean up the title by removing all pattern matches
         TITLE_CLEANUP_PATTERNS.forEach(pattern => {
             title = title.replace(pattern, '');
         });
@@ -329,21 +282,17 @@ class StorytelProvider {
                 subtitle = `${seriesName} ${book.seriesOrder}`;
             }
 
-            // Removes series from title name, but only when the title is not
-            // identical to or ending with the series name (e.g. "Två berättelser
-            // om Lotta på Bråkmakargatan" should keep its full title)
+            // Titles equal to or ending with the series name keep it ("Två berättelser om Lotta på Bråkmakargatan")
             if (title.includes(seriesName) && title !== seriesName) {
                 const safeSeriesName = this.escapeRegex(seriesName);
 
-                // Case 1: Series name at end after separator — "Title - SeriesName" or "Title, SeriesName"
-                // Guard: skip trailingRegex if seriesName is excessively long (prevents O(n*m) regex backtracking)
+                // Length guard: a very long series name would make trailingRegex backtrack O(n*m)
                 if (safeSeriesName.length <= 200) {
                     const trailingRegex = new RegExp(`^(.+?)[-,]\\s*${safeSeriesName}$`, 'i');
                     const trailingMatch = title.match(trailingRegex);
                     if (trailingMatch) {
                         title = trailingMatch[1].trim();
                     }
-                    // Case 2: Series name at start — "SeriesName ActualTitle"
                     else if (title.startsWith(seriesName)) {
                         const remainder = title.slice(seriesName.length).replace(/^[\s,\-:]+/, '').trim();
                         if (remainder.length > 0) {
@@ -351,7 +300,6 @@ class StorytelProvider {
                         }
                     }
                 } else {
-                    // Series name too long for safe regex — fall back to startsWith only
                     if (title.startsWith(seriesName)) {
                         const remainder = title.slice(seriesName.length).replace(/^[\s,\-:]+/, '').trim();
                         if (remainder.length > 0) {
@@ -362,9 +310,7 @@ class StorytelProvider {
             }
         }
 
-        // Check if there is a subtitle (separated by : or " - ")
-        // Only split on "-" when surrounded by spaces to avoid splitting
-        // hyphenated words like "Harry-Potter-Lexikon"
+        // Split on "-" only between spaces, so "Harry-Potter-Lexikon" stays whole
         if (title.includes(':') || title.includes(' - ')) {
             const parts = title.split(/:|(?<=\s)-(?=\s)/);
             if (parts.length > 1 && parts[0].trim().length >= 3 && parts[1].trim().length >= 3) {
@@ -373,13 +319,11 @@ class StorytelProvider {
             }
         }
 
-        // If title is only a number (incl. decimal like 22.1) or a generic episode/part/volume label, swap with subtitle
         if (GENERIC_LABEL_PATTERN.test(title.trim()) && subtitle) {
             title = subtitle;
             subtitle = undefined;
         }
 
-        // Final cleanup of title
         TITLE_CLEANUP_PATTERNS.forEach(pattern => {
             title = title.replace(pattern, '');
         });
@@ -397,7 +341,6 @@ class StorytelProvider {
             ? book.tags.map(t => t.name)
             : undefined;
 
-        // Use ebook-specific covers when searching for ebooks
         const cover = type === 'ebook'
             ? (book.largeCoverE || book.coverE || book.largeCover || book.cover)
             : (book.largeCover || book.cover || book.largeCoverE || book.coverE);
@@ -432,7 +375,6 @@ class StorytelProvider {
             abridged: book.abridged === 1 ? true : undefined
         };
 
-        // Remove undefined/null values
         Object.keys(metadata).forEach(key =>
             (metadata[key] === undefined || metadata[key] === null) && delete metadata[key]
         );
@@ -440,13 +382,7 @@ class StorytelProvider {
         return metadata;
     }
 
-    /**
-     * Fetches raw search results from the Storytel API
-     * @param formattedQuery {string} Query with spaces replaced by '+'
-     * @param locale {string} Storytel region/locale
-     * @returns {Promise<object>}
-     * @throws {StorytelApiError} on network errors, timeouts, non-2xx status or malformed payload
-     */
+    /** Raw Storytel search; throws StorytelApiError on network errors, non-2xx status or a malformed payload. */
     async fetchFromApi(formattedQuery, locale) {
         const url = `${this.baseSearchUrl}?request_locale=${encodeURIComponent(locale)}&q=${encodeURIComponent(formattedQuery)}`;
 
@@ -482,17 +418,7 @@ class StorytelProvider {
         return response.data;
     }
 
-    /**
-     * Searches for books in the Storytel API
-     * @param query {string} Search query
-     * @param author {string} Optional author, appended to the query and used for relevance sorting
-     * @param locale {string} Locale for the search
-     * @param type {string} Type filter: 'audiobook', 'ebook', or 'all'
-     * @param limit {number} Max results (1-MAX_LIMIT, default DEFAULT_LIMIT)
-     * @param isbn {string} Optional ISBN; exact ISBN hits are ranked first
-     * @returns {Promise<{matches: *[]}>}
-     * @throws {StorytelApiError} when Storytel is unreachable
-     */
+    /** Searches Storytel; throws StorytelApiError when Storytel is unreachable. */
     async searchBooks(query, author = '', locale, type = 'all', limit = DEFAULT_LIMIT, isbn = '') {
         const cleanQuery = query.split(':')[0].trim();
         const searchQuery = author ? `${cleanQuery} ${author}` : cleanQuery;
@@ -504,7 +430,6 @@ class StorytelProvider {
 
         const sliceResult = result => ({ ...result, matches: result.matches.slice(0, maxResults) });
 
-        // Check persistent cache
         if (getCache) {
             try {
                 const cached = getCache.get(cacheKey, Date.now() - CACHE_EVICTION_DAYS * 24 * 60 * 60 * 1000);
@@ -517,7 +442,6 @@ class StorytelProvider {
             }
         }
 
-        // Reuse existing promise if same query is already in-flight
         if (!inFlight.has(cacheKey)) {
             const apiCallPromise = this.fetchMatches(cleanQuery, formattedQuery, author, locale, type, isbn, cacheKey)
                 .finally(() => inFlight.delete(cacheKey));
@@ -529,11 +453,7 @@ class StorytelProvider {
         return sliceResult(await inFlight.get(cacheKey));
     }
 
-    /**
-     * Looks up an ISBN and puts exact hits in front of the regular results.
-     * Failures are logged and ignored — the ISBN lookup is only a ranking aid.
-     * @returns {Promise<object[]>}
-     */
+    /** Puts exact ISBN hits first; failures are ignored because the ISBN only aids ranking. */
     async prependIsbnHits(books, isbn, locale) {
         try {
             const isbnData = await this.fetchFromApi(isbn, locale);
@@ -549,10 +469,7 @@ class StorytelProvider {
         }
     }
 
-    /**
-     * Fetches, formats, ranks and caches all matches for a search (unlimited)
-     * @returns {Promise<{matches: *[]}>}
-     */
+    /** Fetches, formats, ranks and caches the full, unlimited match list. */
     async fetchMatches(cleanQuery, formattedQuery, author, locale, type, isbn, cacheKey) {
         let books;
         try {
@@ -560,7 +477,6 @@ class StorytelProvider {
             books = searchData.books;
             logger.info({ count: books.length, query: formattedQuery }, 'search results received');
 
-            // Retry without author if combined search found nothing
             if (books.length === 0 && author) {
                 const queryOnly = cleanQuery.replace(/\s+/g, '+');
                 logger.info({ query: queryOnly }, 'retrying without author');
@@ -569,7 +485,6 @@ class StorytelProvider {
                 logger.info({ count: books.length }, 'retry results received');
             }
 
-            // Exact ISBN hits (sent by Audiobookshelf when the item has one) go first
             if (isbn) {
                 books = await this.prependIsbnHits(books, isbn, locale);
             }
@@ -589,7 +504,6 @@ class StorytelProvider {
             }
         }
 
-        // Sort by author relevance if author was provided (stable sort keeps ISBN hits first)
         if (author) {
             const score = m => (isbnHits.has(m) ? 2 : 0) + this.authorMatchScore(m.author, author);
             matches.sort((a, b) => score(b) - score(a));
@@ -597,7 +511,7 @@ class StorytelProvider {
 
         const result = { matches };
 
-        // Only cache non-empty results
+        // Empty results usually mean an outage, so they are never cached
         if (matches.length > 0 && setCache) {
             try {
                 setCache.run(cacheKey, JSON.stringify(result), Date.now());
@@ -612,10 +526,7 @@ class StorytelProvider {
 
 }
 
-/**
- * Returns current cache status for health endpoint
- * @returns {{ available: boolean, size: number|null }}
- */
+/** Cache status for the health endpoint. */
 function getDbStatus() {
     if (!db) return { available: false, size: null };
     try {
@@ -626,9 +537,7 @@ function getDbStatus() {
     }
 }
 
-/**
- * Closes the SQLite database connection gracefully
- */
+/** Closes the SQLite cache. */
 function closeDb() {
     if (db) {
         try {

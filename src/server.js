@@ -9,7 +9,6 @@ const app = express();
 const port = PORT;
 const auth = process.env.AUTH;
 
-// CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS;
 if (allowedOrigins) {
     const origins = allowedOrigins.split(',').map(o => o.trim());
@@ -28,7 +27,6 @@ if (allowedOrigins) {
 
 const provider = new StorytelProvider();
 
-// Timing-safe auth comparison
 const checkAuth = (req, res, next) => {
     if (auth) {
         const token = req.headers.authorization || '';
@@ -52,7 +50,6 @@ const validateRegion = (req, res, next) => {
     next();
 };
 
-// Query validation middleware
 const validateQuery = (req, res, next) => {
     // Express parses repeated params (?query=a&query=b) into arrays — reject non-strings
     for (const key of ['query', 'title', 'author', 'limit', 'isbn']) {
@@ -75,13 +72,11 @@ const validateQuery = (req, res, next) => {
     next();
 };
 
-// Log incoming requests for debugging
 app.use((req, res, next) => {
     logger.info({ method: req.method, url: req.originalUrl, query: req.query }, 'request');
     next();
 });
 
-// Health endpoint
 app.get('/health', (req, res) => {
     const cacheStatus = getDbStatus();
     res.json({
@@ -94,14 +89,7 @@ app.get('/health', (req, res) => {
     });
 });
 
-// ABS sends mediaType=book for all book types — always search all
-// The /audiobook/ and /book/ endpoints handle specific filtering
-
-/**
- * Builds a search route handler for the given media type
- * @param type {string} 'all', 'ebook' or 'audiobook'
- * @param transform {function} Optional post-processing of the result
- */
+// ABS sends mediaType=book for every book type, so the route path decides the filter
 const searchHandler = (type, transform = results => results) => async (req, res) => {
     const { query = '', title = '', author = '', limit, isbn = '' } = req.query;
     const searchQuery = query || title;
@@ -144,20 +132,16 @@ const withAudiobookStats = results => {
     };
 };
 
-// Original search endpoint
 app.get('/:region/search', checkAuth, validateRegion, validateQuery, searchHandler('all'));
 
-// E-Book search endpoint
 app.get('/:region/book/search', checkAuth, validateRegion, validateQuery, searchHandler('ebook'));
 
-// Audiobook search endpoint
 app.get('/:region/audiobook/search', checkAuth, validateRegion, validateQuery, searchHandler('audiobook', withAudiobookStats));
 
 const server = app.listen(port, () => {
     logger.info({ port, axiosTimeoutMs: AXIOS_TIMEOUT_MS }, 'Storytel provider listening');
 });
 
-// Graceful shutdown
 function shutdown(signal) {
     logger.info({ signal }, 'shutdown signal received — closing server');
     server.close(() => {
@@ -167,7 +151,6 @@ function shutdown(signal) {
         process.exit(0);
     });
 
-    // Force exit after 10 seconds if server.close() hangs
     setTimeout(() => {
         logger.warn('forced exit after timeout');
         process.exit(1);
