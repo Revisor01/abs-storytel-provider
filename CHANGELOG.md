@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-27
+
 ### Changed
 
 - Docker image now based on Node.js 26; 32-bit ARM (armv7) images are no longer built – use the last armv7 image or a 64-bit OS.
@@ -105,7 +107,8 @@ Fixes for all four findings from the first CodeQL scan (enabled in 2.0.2):
 
 Last release before the 2.x hardening milestone. See [GitHub releases] for earlier history.
 
-[Unreleased]: https://github.com/Revisor01/abs-storytel-provider/compare/2.1.0...HEAD
+[Unreleased]: https://github.com/Revisor01/abs-storytel-provider/compare/2.2.0...HEAD
+[2.2.0]: https://github.com/Revisor01/abs-storytel-provider/compare/2.1.0...2.2.0
 [2.1.0]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.3...2.1.0
 [2.0.3]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.1...v2.0.2
