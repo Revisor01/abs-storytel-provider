@@ -5,7 +5,6 @@ updates:
     schedule:
       interval: weekly
     groups:
-      # One PR for all minor/patch updates instead of one per package
       npm-minor-patch:
         update-types: [minor, patch]
     open-pull-requests-limit: 5

@@ -13,11 +13,9 @@
 
 ## About
 
-Audiobookshelf can fetch titles, covers, series and narrators from metadata
-providers, but Storytel is not one of the built-in ones. This service sits
-between the two: Audiobookshelf asks it, it asks Storytel, cleans up the
-answer and returns it in the format Audiobookshelf expects. Results are cached
-locally, so each search reaches Storytel only once.
+Audiobookshelf has no built-in Storytel provider. This service queries
+Storytel, cleans up the metadata and returns it in the format Audiobookshelf
+expects.
 
 ## Features
 - Highest-resolution cover images Storytel serves (640x640)
@@ -209,32 +207,7 @@ If Storytel is unreachable or returns an error, the provider answers with HTTP 5
 
 ### Caching
 
-Search results are stored in a **persistent SQLite database** (`data/cache.db`). Each unique search query is only sent to Storytel once — all subsequent requests are served from the local cache. This prevents rate-limiting (403 errors) and speeds up repeated searches.
-
-- Empty results (e.g. from timeouts or API errors) are **never cached**
-- Stale empty cache entries from older versions are automatically purged on startup
-- Entries older than `CACHE_EVICTION_DAYS` (default: 30) are ignored and removed on startup. To clear the cache manually, delete `data/cache.db` and restart the container.
-
-### Metadata processing
-
-#### Title Handling
-- Removes abridged/unabridged markers in 15 languages
-- Cleans series/episode/volume markers from titles across 20+ languages
-- Extracts subtitles (splits on `:` or ` - `)
-- Swaps numeric-only titles with subtitle
-
-#### Series Information
-- Extracts all series a book belongs to (multi-series support)
-- Returns series even without a sequence number
-- Removes series name from title to avoid duplication
-
-#### Cover Images
-- Requested at 1200x1200; Storytel's CDN currently delivers at most 640x640
-- Uses e-book-specific covers when searching for e-books
-
-#### Description
-- HTML tags stripped and entities decoded
-- Clean plaintext output
+Each unique search is sent to Storytel once and then served from `data/cache.db`, which avoids rate limiting (HTTP 403). Empty results are never cached; entries older than `CACHE_EVICTION_DAYS` are ignored. To clear the cache, delete `data/cache.db` and restart the container.
 
 ## Architecture
 
@@ -247,11 +220,6 @@ abs-storytel-provider
 │   └── logger.js     — structured logging
 └── test/             — live tests (node --test), run on every pull request
 ```
-
-**Principles:**
-- **Outages must be visible.** If Storytel fails, the provider answers with
-  HTTP 503 instead of an empty list, and empty results are never cached.
-- **Ask Storytel as rarely as possible.** Every unique search is cached.
 
 ## Known Limitations
 - Search results depend on Storytel API availability
