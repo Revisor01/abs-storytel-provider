@@ -1,6 +1,6 @@
 name: Suggest a feature
 description: An idea for a new feature or an improvement.
-labels: ["vorschlag"]
+labels: ["enhancement"]
 body:
   - type: textarea
     id: request

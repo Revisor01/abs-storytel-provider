@@ -1,6 +1,6 @@
 name: Report a bug
 description: Something does not work as expected.
-labels: ["fehler"]
+labels: ["bug"]
 body:
   - type: markdown
     attributes:

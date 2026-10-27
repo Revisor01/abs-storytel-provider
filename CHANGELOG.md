@@ -11,10 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `body-parser` 2.4.0 (via Express), resolving the open high-severity advisory.
 
-### Other
-
-- The README is now also available in German; issue and pull request templates and the security and contributing notes are bilingual.
-
 ## [2.1.0] - 2026-10-24
 
 ### Fixed
@@ -105,8 +101,8 @@ Fixes for all four findings from the first CodeQL scan (enabled in 2.0.2):
 
 Last release before the 2.x hardening milestone. See [GitHub releases] for earlier history.
 
-[Unreleased]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.1.0...HEAD
-[2.1.0]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.3...v2.1.0
+[Unreleased]: https://github.com/Revisor01/abs-storytel-provider/compare/2.1.0...HEAD
+[2.1.0]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.3...2.1.0
 [2.0.3]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/Revisor01/abs-storytel-provider/compare/v2.0.0...v2.0.1
