@@ -18,18 +18,12 @@ Storytel, cleans up the metadata and returns it in the format Audiobookshelf
 expects.
 
 ## Features
-- Highest-resolution cover images Storytel serves (640x640)
-- Smart title and series handling with subtitle extraction
-- Multi-region support (20+ languages)
-- Separate audiobook and e-book endpoints with proper type filtering
-- Audiobook-specific metadata (narrator, duration, publisher, ISBN)
-- Author relevance ranking when author is provided
-- Automatic retry without author when combined search finds no results
-- ISBN-aware ranking: exact ISBN hits (sent by Audiobookshelf) are listed first
-- Multi-series support
-- Tags extraction
-- HTML cleanup in descriptions
-- Abridged/Unabridged marker removal in 15 languages
+- Clean titles, subtitles and series (multi-series, 20+ languages, abridged markers in 15)
+- Separate audiobook and e-book endpoints, multi-region support
+- Audiobook metadata: narrator, duration, publisher, ISBN, tags
+- Highest-resolution covers Storytel serves (640x640)
+- Ranking by author and exact ISBN (sent by Audiobookshelf)
+- Plain-text descriptions without HTML
 - Persistent SQLite cache to minimize API calls
 - Configurable result limit (1–50, default: 5)
 
@@ -55,15 +49,10 @@ expects.
         external: true
     ```
 
-    > **Important:** The volume mount `./data:/app/data` is required for the persistent search cache. Without it, the cache is lost on container restart.
-    >
-    > The `abs_network` is a Docker network that allows this container to communicate with your Audiobookshelf container by name. Both containers must be on the same network.
-    >
-    > If you don't have this network yet, create it first:
-    > ```bash
-    > docker network create abs_network
-    > ```
-    > Then also add your Audiobookshelf container to this network (add `abs_network` to its `networks:` section).
+    > The `./data` volume keeps the search cache across restarts. Both
+    > containers must share `abs_network`; create it with
+    > `docker network create abs_network` and add it to your Audiobookshelf
+    > container as well.
 
     <details>
     <summary><strong>Alternative: Using your own network or no shared network</strong></summary>
@@ -207,7 +196,7 @@ Optional parameters:
 - `&limit=N` — Maximum number of results (1–50, default: 5)
 - `&isbn=...` — Ranks the exact ISBN match first (Audiobookshelf sends this automatically)
 
-If Storytel is unreachable or returns an error, the provider answers with HTTP 503 instead of an empty result, so outages are visible in the Audiobookshelf logs.
+If Storytel is unreachable or returns an error, the provider answers with HTTP 503 instead of an empty result.
 
 ### Caching
 
