@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `body-parser` 2.4.0 (via Express), resolving the open high-severity advisory.
+
 ### Other
 
 - The README is now also available in German; issue and pull request templates and the security and contributing notes are bilingual.
