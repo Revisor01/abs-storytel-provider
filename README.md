@@ -110,6 +110,10 @@ expects.
     docker compose up -d
     ```
 
+Images are built for `linux/amd64` and `linux/arm64`. Since 2.2.0 there is no
+32-bit ARM (armv7) image; on armv7, pin the last one, `sha-ad1d90a`, or switch
+to a 64-bit OS.
+
 ## Configuration in Audiobookshelf
 
 1. Go to **Settings → Metadata** in Audiobookshelf.

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Docker image now based on Node.js 26; 32-bit ARM (armv7) images are no longer built – use the last armv7 image or a 64-bit OS.
+
 ### Security
 
 - `body-parser` 2.4.0 (via Express), resolving the open high-severity advisory.
