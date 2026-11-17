@@ -504,7 +504,7 @@ class StorytelProvider {
             }
         }
 
-        if (author) {
+        if (author || isbnHits.size > 0) {
             const score = m => (isbnHits.has(m) ? 2 : 0) + this.authorMatchScore(m.author, author);
             matches.sort((a, b) => score(b) - score(a));
         }
