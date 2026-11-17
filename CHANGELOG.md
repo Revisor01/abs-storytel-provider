@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A search with an ISBN but without an author no longer ignores the ISBN when Storytel's own ISBN lookup returns nothing: the exact hit is now ranked first in that case too.
+
 ## [2.2.0] - 2026-10-27
 
 ### Changed
